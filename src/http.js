@@ -18,6 +18,7 @@ import http from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { buildServer } from "./build-server.js";
 import { readLedger } from "./ledger.js";
+import { validateToken } from "./backend.js";
 
 const PORT = Number(process.env.PORT || process.env.MCP_HTTP_PORT || 3005);
 const MCP_PATH = process.env.MCP_PATH || "/mcp";
@@ -95,8 +96,22 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
-  // POC : appelant anonyme (pas d'auth) → lien plateforme par défaut.
-  const caller = { user: null, platformOwner: PLATFORM_OWNER };
+  // Identité via token personnel passé dans l'URL du connecteur (?k=...).
+  // Sans token → anonyme (lien plateforme par défaut).
+  const token = url.searchParams.get("k");
+  let caller = { user: null, platformOwner: PLATFORM_OWNER };
+  if (token) {
+    const identity = await validateToken(token);
+    if (identity?.user_id) {
+      caller = {
+        user: identity.user_id,
+        email: identity.email,
+        emailConfirmed: identity.email_confirmed,
+        platformOwner: PLATFORM_OWNER,
+        token,
+      };
+    }
+  }
   const mcp = buildServer({ caller });
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined, // stateless

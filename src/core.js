@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { findProgramBySlug, communityLinks, moderationQueue } from "./data.js";
-import { fetchPrograms, fetchProgramBySlug } from "./backend.js";
+import { fetchPrograms, fetchProgramBySlug, publishAnnouncement } from "./backend.js";
 import { resolveLink } from "./resolver.js";
 import { withFlavor } from "./flavor.js";
 import { timeBucket, orderSponsored } from "./boost.js";
@@ -209,4 +209,40 @@ export function suggestProgram({ name, url, category }, caller, seed = 0) {
       seed
     ),
   };
+}
+
+// ---- create_announcement (connecté uniquement) ----
+// Publie une annonce de parrainage au nom de l'utilisateur connecté, via
+// l'API leparrain.com (anti-fraude + unicité gérés côté serveur).
+export async function createAnnouncement(
+  { program, title, content, referral_url, referral_code },
+  caller,
+  seed = 0
+) {
+  if (!caller.user || !caller.token) {
+    return {
+      data: null,
+      isError: true,
+      text: "Vous devez être connecté pour publier une annonce (connecteur avec votre token personnel).",
+    };
+  }
+  const referral_type = referral_url && referral_code ? "BOTH" : referral_code ? "CODE" : "LINK";
+  const res = await publishAnnouncement(caller.token, {
+    program,
+    title,
+    content,
+    referral_type,
+    referral_url: referral_url || null,
+    referral_code: referral_code || null,
+  });
+  if (res.ok) {
+    return {
+      data: res.data,
+      text: withFlavor(`C'est publié ! Votre annonce pour « ${program} » est en ligne : ${res.data.url}`, seed),
+    };
+  }
+  if (res.status === 409) {
+    return { data: res.data, text: `Vous avez déjà une annonce pour « ${program} ».` };
+  }
+  return { data: null, isError: true, text: res.data?.error || "La publication de l'annonce a échoué." };
 }

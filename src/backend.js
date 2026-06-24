@@ -68,3 +68,58 @@ export async function fetchProgramBySlug(slug) {
   }
   return findProgramBySlug(slug);
 }
+
+// ─────────────────────────────────────────────────────────────
+// Auth + écriture par token personnel (mode api uniquement).
+// Le MCP ne stocke aucun secret : il relaie le token à leparrain.com qui
+// valide et renvoie l'identité. Petit cache (60 s) pour éviter de revalider
+// à chaque requête.
+// ─────────────────────────────────────────────────────────────
+const tokenCache = new Map(); // token -> { identity, exp }
+
+async function lpFetch(pathname, init) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  try {
+    return await fetch(new URL(pathname, API_BASE), { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/** Valide un token personnel → identité {user_id, email, email_confirmed} ou null. */
+export async function validateToken(token) {
+  if (!token || MODE !== "api" || !API_BASE) return null;
+  const cached = tokenCache.get(token);
+  if (cached && cached.exp > Date.now()) return cached.identity;
+  try {
+    const r = await lpFetch("/api/mcp/me", {
+      headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+    });
+    const identity = r.ok ? await r.json() : null;
+    tokenCache.set(token, { identity, exp: Date.now() + (identity ? 60_000 : 15_000) });
+    return identity;
+  } catch {
+    return null;
+  }
+}
+
+/** Publie une annonce au nom du token. Renvoie {ok, status, data}. */
+export async function publishAnnouncement(token, payload) {
+  if (!API_BASE) return { ok: false, status: 0, data: { error: "API indisponible" } };
+  try {
+    const r = await lpFetch("/api/mcp/announcements", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+        accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, data };
+  } catch (e) {
+    return { ok: false, status: 0, data: { error: String(e) } };
+  }
+}

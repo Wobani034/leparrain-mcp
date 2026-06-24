@@ -11,8 +11,8 @@ import { z } from "zod";
 import {
   searchPrograms,
   getProgram,
-  createReferralLink,
   suggestProgram,
+  createAnnouncement,
 } from "./core.js";
 
 // Instructions de STYLE envoyées au modèle (le client les transmet au LLM).
@@ -71,22 +71,24 @@ export function buildServer({ caller }) {
     async ({ slug }) => toResult(await getProgram({ slug }, caller, seed++))
   );
 
-  // Outil d'écriture réservé aux appelants connectés. En anonyme on ne
-  // l'enregistre PAS → le modèle ne peut ni l'appeler ni le mentionner.
+  // Outil d'écriture réservé aux appelants CONNECTÉS (token personnel). En
+  // anonyme on ne l'enregistre PAS → le modèle ne peut ni l'appeler ni le citer.
   if (caller.user) {
     server.registerTool(
-      "create_referral_link",
+      "create_announcement",
       {
-        title: "Publier mon lien de parrainage",
+        title: "Publier mon annonce de parrainage",
         description:
-          "Publie VOTRE lien de parrainage pour un programme existant. Une fois publié, c'est votre lien qui ressortira quand vous interrogez ce programme.",
+          "Publie une annonce de parrainage en votre nom dans l'annuaire Le Parrain, avec votre lien et/ou votre code. Une seule annonce par programme.",
         inputSchema: {
-          slug: z.string().describe("Identifiant du programme concerné."),
-          url: z.string().describe("Votre lien de parrainage (https obligatoire)."),
+          program: z.string().describe("Identifiant du programme (slug, ex: 'boursobank')."),
+          title: z.string().optional().describe("Titre court de l'annonce."),
+          content: z.string().optional().describe("Texte de l'annonce (vouvoiement)."),
+          referral_url: z.string().optional().describe("Votre lien de parrainage (https)."),
+          referral_code: z.string().optional().describe("Votre code de parrainage."),
         },
       },
-      async ({ slug, url }) =>
-        toResult(createReferralLink({ slug, url }, caller, seed++))
+      async (args) => toResult(await createAnnouncement(args, caller, seed++))
     );
   }
 
