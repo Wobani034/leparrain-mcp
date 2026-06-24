@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "node src/server.js",
+    "start:http": "node src/http.js",
     "smoke": "node test/smoke.js",
     "inspect": "npx @modelcontextprotocol/inspector node src/server.js"
   },
