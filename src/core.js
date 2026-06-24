@@ -67,8 +67,7 @@ export async function searchPrograms({ query }, caller, seed = 0) {
   });
 
   const lines = enriched.map(
-    (e) =>
-      `• ${e.name} (${e.category})${e.sponsored ? " — sponsorisé" : ""} — ${e.referralLink || "aucun lien pour l'instant"}`
+    (e) => `• ${e.name} (${e.category}) — ${e.referralLink || "aucun lien pour l'instant"}`
   );
 
   const text = [
