@@ -1,13 +1,14 @@
-# Dépendances
-node_modules/
 
+# Dépendances
+# Logs / divers
 # Secrets — JAMAIS commités (ce repo peut devenir public)
+*.key
+*.log
+*.pem
+.DS_Store
 .env
 .env.local
-*.key
-*.pem
-
-# Logs / divers
+node_modules/
 npm-debug.log*
-*.log
-.DS_Store
+preview-v2.png
+preview.png
