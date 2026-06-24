@@ -45,6 +45,24 @@ La logique de choix du lien (« chaîne de résolution ») est décrite dans
 
 ## Brancher à un client MCP
 
+### Option A — Remote (URL à coller, recommandé)
+
+Serveur en ligne, **aucun fichier à éditer** : collez l'URL dans un connecteur
+custom de ChatGPT / Claude.
+
+```
+https://leparrain.com/mcp
+```
+
+POC ouvert sans auth → appelant anonyme → lien plateforme par défaut.
+Endpoint de santé : `GET https://leparrain.com/mcp/health`.
+
+Déploiement (serveur Plesk) : process PM2 `leparrain-mcp` (`src/http.js`, port
+127.0.0.1:3005), reverse-proxy nginx `location /mcp` dans le `vhost_nginx.conf`
+de leparrain.com. Process séparé : **aucun code ni base du Parrain**.
+
+### Option B — Local (stdio)
+
 **Claude Desktop** — `claude_desktop_config.json` :
 
 ```json
