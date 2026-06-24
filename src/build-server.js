@@ -15,6 +15,17 @@ import {
   suggestProgram,
 } from "./core.js";
 
+// Instructions de STYLE envoyées au modèle (le client les transmet au LLM).
+// But : conversation humaine, vouvoiement, zéro jargon, et exactitude sur
+// l'état de connexion (ne jamais prétendre « votre lien » si non connecté).
+const INSTRUCTIONS = `Le Parrain MCP donne accès à un annuaire de programmes de parrainage et au bon lien à partager.
+
+Règles de réponse, à respecter strictement :
+- Répondez comme un humain, en français, en vouvoyant la personne. Conversation naturelle.
+- Ne mentionnez JAMAIS les noms techniques des outils (search_programs, get_program, etc.), ni de "codes", ni de détails de fonctionnement interne. La personne ne connaît rien au développement.
+- N'affirmez jamais que la personne possède "son" lien de parrainage tant qu'elle n'est pas connectée à son compte Le Parrain. Si elle n'est pas connectée, présentez simplement les liens comme ceux proposés par Le Parrain, et proposez-lui de connecter son compte pour faire ressortir ses propres liens.
+- Soyez concis : donnez directement le ou les liens utiles. Pas de blabla technique.`;
+
 function toResult(out) {
   return {
     content: [{ type: "text", text: out.text }],
@@ -28,7 +39,10 @@ function toResult(out) {
  * @param {{user: string|null, platformOwner: string}} opts.caller - identité de l'appelant
  */
 export function buildServer({ caller }) {
-  const server = new McpServer({ name: "leparrain-mcp", version: "0.1.0" });
+  const server = new McpServer(
+    { name: "leparrain-mcp", version: "0.1.0" },
+    { instructions: INSTRUCTIONS }
+  );
   let seed = 0; // varie la réplique humoristique d'un appel à l'autre
 
   server.registerTool(

@@ -10,7 +10,7 @@ import {
   communityLinks,
   moderationQueue,
 } from "./data.js";
-import { resolveLink, explainReason } from "./resolver.js";
+import { resolveLink } from "./resolver.js";
 import { withFlavor } from "./flavor.js";
 
 // Identité de l'appelant déduite de la config (POC) ou de l'auth (prod).
@@ -60,18 +60,24 @@ export function searchPrograms({ query }, caller, seed = 0) {
     };
   });
 
-  const lines = enriched.map((e) => {
-    let l = `• ${e.name} (${e.category}) → ${e.referralLink || "aucun lien"}`;
-    if (e.invitation) l += `\n  ↳ ${e.invitation}`;
-    return l;
-  });
+  const lines = enriched.map(
+    (e) => `• ${e.name} (${e.category}) — ${e.referralLink || "aucun lien pour l'instant"}`
+  );
+
+  const note = caller.user
+    ? null
+    : "Vous n'êtes pas connecté : ce sont les liens proposés par Le Parrain. Connectez votre compte pour publier et faire ressortir vos propres liens.";
+
+  const parts = [
+    `Voici ce que j'ai trouvé pour « ${query} » :`,
+    "",
+    lines.join("\n"),
+  ];
+  if (note) parts.push("", note);
 
   return {
-    data: { results: enriched },
-    text: withFlavor(
-      `${enriched.length} programme(s) pour « ${query} » :\n\n${lines.join("\n")}`,
-      seed
-    ),
+    data: { results: enriched, authenticated: !!caller.user },
+    text: withFlavor(parts.join("\n"), seed),
   };
 }
 
@@ -91,10 +97,16 @@ export function getProgram({ slug }, caller, seed = 0) {
     "",
     p.description,
     "",
-    `Lien de parrainage : ${res.link || "aucun lien disponible"}`,
-    `(${explainReason(res, p)})`,
+    `Lien à partager : ${res.link || "aucun lien disponible pour l'instant"}`,
   ];
-  if (res.invitation) body.push("", `↳ ${res.invitation}`);
+  if (res.invitation) {
+    body.push("", res.invitation);
+  } else if (!caller.user && res.link) {
+    body.push(
+      "",
+      "Vous n'êtes pas connecté : c'est le lien proposé par Le Parrain. Connectez votre compte pour faire ressortir le vôtre."
+    );
+  }
 
   return {
     data: {
@@ -105,6 +117,7 @@ export function getProgram({ slug }, caller, seed = 0) {
       referralLink: res.link,
       reason: res.reason,
       boosted: res.boosted,
+      authenticated: !!caller.user,
     },
     text: withFlavor(body.join("\n"), seed),
   };
