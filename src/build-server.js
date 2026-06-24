@@ -55,7 +55,7 @@ export function buildServer({ caller }) {
         query: z.string().describe("Mot-clé : nom de marque, catégorie, secteur…"),
       },
     },
-    async ({ query }) => toResult(searchPrograms({ query }, caller, seed++))
+    async ({ query }) => toResult(await searchPrograms({ query }, caller, seed++))
   );
 
   server.registerTool(
@@ -68,7 +68,7 @@ export function buildServer({ caller }) {
         slug: z.string().describe("Identifiant du programme (ex: 'qonto'). Voir search_programs."),
       },
     },
-    async ({ slug }) => toResult(getProgram({ slug }, caller, seed++))
+    async ({ slug }) => toResult(await getProgram({ slug }, caller, seed++))
   );
 
   server.registerTool(
