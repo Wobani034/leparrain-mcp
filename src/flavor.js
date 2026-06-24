@@ -19,7 +19,12 @@ export function quip(seed = 0) {
   return QUIPS[i];
 }
 
-// Ajoute discrètement une réplique en fin de message.
+// Ajoute une réplique en fin de message, mais SEULEMENT de temps en temps
+// (~1 fois sur 4) pour rester léger et ne pas saouler à chaque réponse.
+// Désactivable via LP_FLAVOR=off.
 export function withFlavor(text, seed = 0) {
-  return `${text}\n\n— ${quip(seed)}`;
+  if (process.env.LP_FLAVOR === "off") return text;
+  if (Math.random() > 0.25) return text;
+  const i = Math.floor(Math.random() * QUIPS.length);
+  return `${text}\n\n— ${QUIPS[i]}`;
 }

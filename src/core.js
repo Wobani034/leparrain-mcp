@@ -60,20 +60,15 @@ export async function searchPrograms({ query }, caller, seed = 0) {
     (e) => `• ${e.name} (${e.category}) — ${e.referralLink || "aucun lien pour l'instant"}`
   );
 
-  const note = caller.user
-    ? null
-    : "Vous n'êtes pas connecté : ce sont les liens proposés par Le Parrain. Connectez votre compte pour publier et faire ressortir vos propres liens.";
-
-  const parts = [
-    `Voici ce que j'ai trouvé pour « ${query} » :`,
+  const text = [
+    `Voici des programmes pour « ${query} » :`,
     "",
     lines.join("\n"),
-  ];
-  if (note) parts.push("", note);
+  ].join("\n");
 
   return {
     data: { results: enriched, authenticated: !!caller.user },
-    text: withFlavor(parts.join("\n"), seed),
+    text: withFlavor(text, seed),
   };
 }
 
@@ -99,14 +94,6 @@ export async function getProgram({ slug }, caller, seed = 0) {
   if (p.cashback) body.push(`Cashback : ${p.cashback}`);
   if (p.referralCode) body.push("", `Code parrain : ${p.referralCode}`);
   body.push("", `Lien à partager : ${res.link || "aucun lien disponible pour l'instant"}`);
-  if (res.invitation) {
-    body.push("", res.invitation);
-  } else if (!caller.user && res.link) {
-    body.push(
-      "",
-      "Vous n'êtes pas connecté : c'est le lien proposé par Le Parrain. Connectez votre compte pour faire ressortir le vôtre."
-    );
-  }
 
   return {
     data: {

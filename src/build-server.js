@@ -18,13 +18,13 @@ import {
 // Instructions de STYLE envoyées au modèle (le client les transmet au LLM).
 // But : conversation humaine, vouvoiement, zéro jargon, et exactitude sur
 // l'état de connexion (ne jamais prétendre « votre lien » si non connecté).
-const INSTRUCTIONS = `Le Parrain MCP donne accès à un annuaire de programmes de parrainage et au bon lien à partager.
+const INSTRUCTIONS = `Le Parrain MCP donne accès à l'annuaire de programmes de parrainage de leparrain.com.
 
-Règles de réponse, à respecter strictement :
-- Répondez comme un humain, en français, en vouvoyant la personne. Conversation naturelle.
-- Ne mentionnez JAMAIS les noms techniques des outils (search_programs, get_program, etc.), ni de "codes", ni de détails de fonctionnement interne. La personne ne connaît rien au développement.
-- N'affirmez jamais que la personne possède "son" lien de parrainage tant qu'elle n'est pas connectée à son compte Le Parrain. Si elle n'est pas connectée, présentez simplement les liens comme ceux proposés par Le Parrain, et proposez-lui de connecter son compte pour faire ressortir ses propres liens.
-- Soyez concis : donnez directement le ou les liens utiles. Pas de blabla technique.`;
+Style de réponse OBLIGATOIRE :
+- Répondez comme un humain, en français, en vouvoyant la personne. Naturel et BREF.
+- Donnez DIRECTEMENT ce qui est demandé : le programme, le lien à partager, et les récompenses (filleul / parrain / cashback). Rien de plus.
+- Ne mentionnez JAMAIS de noms d'outils ou de fonctions, ni de "codes", ni de détails techniques (connexion au MCP, publication de lien, état de session…). La personne ne connaît rien au développement et s'en moque.
+- Ne proposez pas de fonctionnalités qu'on ne vous a pas demandées. Pas de coaching, pas de "voulez-vous que je…". Répondez à la question, c'est tout.`;
 
 function toResult(out) {
   return {
@@ -71,20 +71,24 @@ export function buildServer({ caller }) {
     async ({ slug }) => toResult(await getProgram({ slug }, caller, seed++))
   );
 
-  server.registerTool(
-    "create_referral_link",
-    {
-      title: "Publier mon lien de parrainage",
-      description:
-        "Publie VOTRE lien de parrainage pour un programme existant. Une fois publié, c'est votre lien qui ressortira quand vous interrogez ce programme. Nécessite d'être connecté.",
-      inputSchema: {
-        slug: z.string().describe("Identifiant du programme concerné."),
-        url: z.string().describe("Votre lien de parrainage (https obligatoire)."),
+  // Outil d'écriture réservé aux appelants connectés. En anonyme on ne
+  // l'enregistre PAS → le modèle ne peut ni l'appeler ni le mentionner.
+  if (caller.user) {
+    server.registerTool(
+      "create_referral_link",
+      {
+        title: "Publier mon lien de parrainage",
+        description:
+          "Publie VOTRE lien de parrainage pour un programme existant. Une fois publié, c'est votre lien qui ressortira quand vous interrogez ce programme.",
+        inputSchema: {
+          slug: z.string().describe("Identifiant du programme concerné."),
+          url: z.string().describe("Votre lien de parrainage (https obligatoire)."),
+        },
       },
-    },
-    async ({ slug, url }) =>
-      toResult(createReferralLink({ slug, url }, caller, seed++))
-  );
+      async ({ slug, url }) =>
+        toResult(createReferralLink({ slug, url }, caller, seed++))
+    );
+  }
 
   server.registerTool(
     "suggest_program",
