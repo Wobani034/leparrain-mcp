@@ -4,12 +4,8 @@
 // ne fait que brancher ces fonctions sur le protocole MCP.
 // ─────────────────────────────────────────────────────────────
 
-import {
-  searchProgramsRaw,
-  findProgramBySlug,
-  communityLinks,
-  moderationQueue,
-} from "./data.js";
+import { findProgramBySlug, communityLinks, moderationQueue } from "./data.js";
+import { fetchPrograms, fetchProgramBySlug } from "./backend.js";
 import { resolveLink } from "./resolver.js";
 import { withFlavor } from "./flavor.js";
 
@@ -36,8 +32,8 @@ function assertSafeUrl(url) {
 }
 
 // ---- search_programs ----
-export function searchPrograms({ query }, caller, seed = 0) {
-  const results = searchProgramsRaw(query);
+export async function searchPrograms({ query }, caller, seed = 0) {
+  const results = await fetchPrograms(query);
   if (results.length === 0) {
     return {
       data: { results: [] },
@@ -82,13 +78,13 @@ export function searchPrograms({ query }, caller, seed = 0) {
 }
 
 // ---- get_program ----
-export function getProgram({ slug }, caller, seed = 0) {
-  const p = findProgramBySlug(slug);
+export async function getProgram({ slug }, caller, seed = 0) {
+  const p = await fetchProgramBySlug(slug);
   if (!p) {
     return {
       data: null,
       isError: true,
-      text: `Programme « ${slug} » introuvable. Essayez search_programs pour trouver le bon identifiant.`,
+      text: `Je ne trouve pas ce programme. Faites une recherche par nom pour tomber sur la bonne fiche.`,
     };
   }
   const res = resolveLink(p, caller);
@@ -96,9 +92,13 @@ export function getProgram({ slug }, caller, seed = 0) {
     `${p.name} — ${p.category}`,
     "",
     p.description,
-    "",
-    `Lien à partager : ${res.link || "aucun lien disponible pour l'instant"}`,
   ];
+  // Détails de récompense quand l'annuaire les connaît.
+  if (p.refereeReward) body.push("", `Pour vous (filleul) : ${p.refereeReward}`);
+  if (p.sponsorReward) body.push(`Pour le parrain : ${p.sponsorReward}`);
+  if (p.cashback) body.push(`Cashback : ${p.cashback}`);
+  if (p.referralCode) body.push("", `Code parrain : ${p.referralCode}`);
+  body.push("", `Lien à partager : ${res.link || "aucun lien disponible pour l'instant"}`);
   if (res.invitation) {
     body.push("", res.invitation);
   } else if (!caller.user && res.link) {

@@ -76,7 +76,7 @@ console.log("\nTools & garde-fous :");
 
 // search renvoie des résultats enrichis
 {
-  const out = searchPrograms({ query: "banque" }, ANON);
+  const out = await searchPrograms({ query: "banque" }, ANON);
   assert.ok(out.data.results.length >= 1);
   assert.ok(out.text.includes("ref=antoine"));
   ok("search_programs enrichit avec le lien résolu");
@@ -84,7 +84,7 @@ console.log("\nTools & garde-fous :");
 
 // get_program inconnu → erreur propre
 {
-  const out = getProgram({ slug: "nexiste-pas" }, ANON);
+  const out = await getProgram({ slug: "nexiste-pas" }, ANON);
   assert.equal(out.isError, true);
   ok("get_program inconnu → erreur lisible");
 }
@@ -125,7 +125,7 @@ console.log("\nTools & garde-fous :");
 {
   const out = suggestProgram({ name: "Revolut", category: "Banque" }, MARIE);
   assert.equal(out.data.status, "pending_moderation");
-  const inSearch = searchPrograms({ query: "Revolut" }, ANON);
+  const inSearch = await searchPrograms({ query: "Revolut" }, ANON);
   assert.equal(inSearch.data.results.length, 0, "ne doit PAS apparaître avant modération");
   ok("suggest_program → modération, pas de publication auto");
 }
