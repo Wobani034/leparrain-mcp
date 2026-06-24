@@ -13,6 +13,7 @@
 // L'auth par compte (clé API / OAuth) viendra en couche 2.
 // ─────────────────────────────────────────────────────────────
 
+import "./env.js"; // DOIT rester en premier (charge .env avant les autres imports)
 import http from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { buildServer } from "./build-server.js";

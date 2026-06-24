@@ -5,6 +5,7 @@
 // (URL à coller), voir src/http.js.
 // ─────────────────────────────────────────────────────────────
 
+import "./env.js"; // DOIT rester en premier (charge .env avant les autres imports)
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { buildServer } from "./build-server.js";
 import { callerFromEnv } from "./core.js";
