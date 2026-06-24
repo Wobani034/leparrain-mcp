@@ -1,0 +1,13 @@
+# Dépendances
+node_modules/
+
+# Secrets — JAMAIS commités (ce repo peut devenir public)
+.env
+.env.local
+*.key
+*.pem
+
+# Logs / divers
+npm-debug.log*
+*.log
+.DS_Store

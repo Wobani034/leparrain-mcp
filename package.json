@@ -1,0 +1,23 @@
+{
+  "name": "leparrain-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Serveur MCP pour interroger l'annuaire de parrainage leparrain.com depuis un assistant IA (ChatGPT, Claude…) et injecter automatiquement le bon lien de parrainage.",
+  "type": "module",
+  "bin": {
+    "leparrain-mcp": "src/server.js"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "smoke": "node test/smoke.js",
+    "inspect": "npx @modelcontextprotocol/inspector node src/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1",
+    "zod": "^3"
+  },
+  "license": "UNLICENSED"
+}
