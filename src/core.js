@@ -8,6 +8,8 @@ import { findProgramBySlug, communityLinks, moderationQueue } from "./data.js";
 import { fetchPrograms, fetchProgramBySlug } from "./backend.js";
 import { resolveLink } from "./resolver.js";
 import { withFlavor } from "./flavor.js";
+import { timeBucket, orderSponsored } from "./boost.js";
+import { appendLedger } from "./ledger.js";
 
 // Identité de l'appelant déduite de la config (POC) ou de l'auth (prod).
 export function callerFromEnv(env = process.env) {
@@ -43,7 +45,16 @@ export async function searchPrograms({ query }, caller, seed = 0) {
       ),
     };
   }
-  const enriched = results.map((p) => {
+  // Placement sponsorisé AUDITABLE : on met les programmes boostés (qui ont
+  // payé) en avant, dans un ordre de rotation pondérée déterministe, et on
+  // trace la mise en avant dans le journal public (preuve d'équité).
+  const bucket = timeBucket(now());
+  const { ordered, featured, slots } = orderSponsored(results, bucket);
+  if (slots.length >= 2) {
+    appendLedger({ ts: now(), seed: bucket, query, slots, featured: featured?.slug ?? null });
+  }
+
+  const enriched = ordered.map((p) => {
     const res = resolveLink(p, caller);
     return {
       slug: p.slug,
@@ -51,13 +62,13 @@ export async function searchPrograms({ query }, caller, seed = 0) {
       category: p.category,
       referralLink: res.link,
       reason: res.reason,
-      boosted: res.boosted,
-      invitation: res.invitation,
+      sponsored: !!p.boosted,
     };
   });
 
   const lines = enriched.map(
-    (e) => `• ${e.name} (${e.category}) — ${e.referralLink || "aucun lien pour l'instant"}`
+    (e) =>
+      `• ${e.name} (${e.category})${e.sponsored ? " — sponsorisé" : ""} — ${e.referralLink || "aucun lien pour l'instant"}`
   );
 
   const text = [
@@ -67,9 +78,14 @@ export async function searchPrograms({ query }, caller, seed = 0) {
   ].join("\n");
 
   return {
-    data: { results: enriched, authenticated: !!caller.user },
+    data: { results: enriched, authenticated: !!caller.user, featured: featured?.slug ?? null },
     text: withFlavor(text, seed),
   };
+}
+
+// Horodatage isolé (facilite un éventuel mock ; Date.now() autorisé hors workflow).
+function now() {
+  return Date.now();
 }
 
 // ---- get_program ----

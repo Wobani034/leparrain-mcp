@@ -8,6 +8,7 @@
 .DS_Store
 .env
 .env.local
+ledger.jsonl
 node_modules/
 npm-debug.log*
 preview-v2.png

@@ -10,7 +10,9 @@
   "scripts": {
     "start": "node src/server.js",
     "start:http": "node src/http.js",
+    "test": "node test/smoke.js && node test/boost.test.js",
     "smoke": "node test/smoke.js",
+    "boost": "node test/boost.test.js",
     "inspect": "npx @modelcontextprotocol/inspector node src/server.js"
   },
   "engines": {

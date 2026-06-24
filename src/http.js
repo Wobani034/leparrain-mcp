@@ -17,6 +17,7 @@ import "./env.js"; // DOIT rester en premier (charge .env avant les autres impor
 import http from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { buildServer } from "./build-server.js";
+import { readLedger } from "./ledger.js";
 
 const PORT = Number(process.env.PORT || process.env.MCP_HTTP_PORT || 3005);
 const MCP_PATH = process.env.MCP_PATH || "/mcp";
@@ -56,6 +57,17 @@ const server = http.createServer(async (req, res) => {
   // Petit endpoint de santé pour vérifier le déploiement.
   if (url.pathname === "/health" || url.pathname === `${MCP_PATH}/health`) {
     return send(res, 200, { ok: true, service: "leparrain-mcp", transport: "http" });
+  }
+
+  // Journal PUBLIC des placements boostés — preuve d'équité (« pas du pipo »).
+  // Lecture seule. Rejouez le code open-source sur ces entrées pour vérifier.
+  if (url.pathname === "/mcp/ledger" || url.pathname === "/ledger") {
+    const limit = Math.min(1000, Math.max(1, parseInt(url.searchParams.get("limit") || "200", 10)));
+    return send(res, 200, {
+      service: "leparrain-mcp",
+      doc: "Round-robin pondéré déterministe. Chaque entrée: {seed, slots:[{slug,weight}], featured}. Rejouez pickWeighted(slots, seed+'#0') → doit donner 'featured'. Code: github.com/Wobani034/leparrain-mcp/blob/main/src/boost.js",
+      entries: readLedger(limit),
+    });
   }
 
   if (url.pathname !== MCP_PATH) {
