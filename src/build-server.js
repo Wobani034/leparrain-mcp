@@ -15,6 +15,8 @@ import {
   createAnnouncement,
   updateAnnouncement,
   deleteAnnouncement,
+  searchBlog,
+  requestCashback,
 } from "./core.js";
 
 // Instructions de STYLE envoyées au modèle (le client les transmet au LLM).
@@ -25,7 +27,8 @@ const INSTRUCTIONS = `Le Parrain MCP donne accès à l'annuaire de programmes de
 Style de réponse OBLIGATOIRE :
 - Répondez comme un humain, en français, en vouvoyant la personne. Naturel et BREF.
 - Pour une demande de lien OU de code : donnez simplement le lien de parrainage ("Voici votre lien de parrainage : …"). N'expliquez PAS la différence technique entre lien et code, ne dites pas que le code est "encodé dans le lien".
-- Si un programme propose un cashback Le Parrain, signalez-le en une phrase.
+- Si un programme propose un cashback Le Parrain, signalez-le en une phrase, et proposez simplement de faire la demande : "Voulez-vous que je demande votre cashback ?" (sans nommer d'outil). N'effectuez la demande qu'après accord.
+- Vous avez accès aux articles du blog Le Parrain (conseils, comparatifs) : utilisez-les pour répondre aux questions plus larges qu'une simple recherche de programme.
 - Si une image/logo est fournie, vous pouvez l'afficher.
 - Quand la personne est connectée et que le lien servi n'est pas le sien, vous POUVEZ proposer, en une phrase simple : "Voulez-vous que je publie votre propre lien de parrainage pour ce programme ?" — sans JAMAIS nommer d'outil/fonction, ni expliquer le fonctionnement (annonce, annuaire, modération, résolution de lien…).
 - Ne mentionnez JAMAIS de noms d'outils ou de fonctions, ni de détails techniques internes. La personne ne connaît rien au développement.
@@ -76,6 +79,19 @@ export function buildServer({ caller }) {
     async ({ slug }) => toResult(await getProgram({ slug }, caller, seed++))
   );
 
+  server.registerTool(
+    "search_blog",
+    {
+      title: "Chercher dans le blog",
+      description:
+        "Cherche dans les articles du blog Le Parrain (conseils, comparatifs, bons plans parrainage) et renvoie les programmes liés. Utile pour des questions plus larges qu'une simple recherche de programme.",
+      inputSchema: {
+        query: z.string().describe("Sujet ou mot-clé (ex: 'meilleure banque', 'cashback')."),
+      },
+    },
+    async ({ query }) => toResult(await searchBlog({ query }, caller, seed++))
+  );
+
   // Outil d'écriture réservé aux appelants CONNECTÉS (token personnel). En
   // anonyme on ne l'enregistre PAS → le modèle ne peut ni l'appeler ni le citer.
   if (caller.user) {
@@ -124,6 +140,23 @@ export function buildServer({ caller }) {
         },
       },
       async (args) => toResult(await deleteAnnouncement(args, caller, seed++))
+    );
+
+    server.registerTool(
+      "request_cashback",
+      {
+        title: "Demander mon cashback",
+        description:
+          "Demande le cashback Le Parrain pour un programme qui en propose un. Les coordonnées sont reprises de votre compte. Une seule demande en cours par programme.",
+        inputSchema: {
+          program: z.string().describe("Identifiant du programme (slug)."),
+          inscription_date: z
+            .string()
+            .optional()
+            .describe("Date d'inscription au programme (AAAA-MM-JJ), optionnel."),
+        },
+      },
+      async (args) => toResult(await requestCashback(args, caller, seed++))
     );
   }
 

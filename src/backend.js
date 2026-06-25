@@ -189,3 +189,37 @@ export async function fetchMyLinks(token) {
     return {};
   }
 }
+
+/** Recherche dans le blog (articles publiés). Renvoie un tableau d'articles. */
+export async function fetchArticles(query) {
+  if (MODE !== "api" || !API_BASE) return [];
+  const qs = query ? `?search=${encodeURIComponent(query)}&limit=8` : "?limit=8";
+  try {
+    const r = await lpFetch(`/api/public/articles${qs}`, { headers: { accept: "application/json" } });
+    if (!r.ok) return [];
+    const j = await r.json();
+    return Array.isArray(j.articles) ? j.articles : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Crée une demande de cashback au nom du token. Renvoie {ok, status, data}. */
+export async function postCashbackRequest(token, payload) {
+  if (!API_BASE) return { ok: false, status: 0, data: { error: "API indisponible" } };
+  try {
+    const r = await lpFetch("/api/mcp/cashback", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+        accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, data };
+  } catch (e) {
+    return { ok: false, status: 0, data: { error: String(e) } };
+  }
+}

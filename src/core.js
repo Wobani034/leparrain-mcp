@@ -12,6 +12,8 @@ import {
   patchAnnouncement,
   removeAnnouncement,
   fetchMyLinks,
+  fetchArticles,
+  postCashbackRequest,
 } from "./backend.js";
 import { resolveLink } from "./resolver.js";
 import { withFlavor } from "./flavor.js";
@@ -288,6 +290,53 @@ export async function updateAnnouncement(
     return { data: null, isError: true, text: `Vous n'avez pas encore d'annonce pour « ${program} ». Publiez-en une d'abord.` };
   }
   return { data: null, isError: true, text: res.data?.error || "La modification a échoué." };
+}
+
+// ---- search_blog ----
+// Cherche dans les articles du blog Le Parrain (conseils, comparatifs, bons
+// plans) et renvoie les programmes liés pour croiser avec l'annuaire.
+export async function searchBlog({ query }, caller, seed = 0) {
+  const articles = await fetchArticles(query);
+  if (articles.length === 0) {
+    return {
+      data: { articles: [] },
+      text: `Aucun article de blog ne correspond à « ${query} ».`,
+    };
+  }
+  const lines = articles.map((a) => {
+    let l = `• ${a.title}\n  ${a.url}`;
+    if (a.excerpt) l += `\n  ${a.excerpt}`;
+    if (a.programs && a.programs.length) l += `\n  Programmes liés : ${a.programs.join(", ")}`;
+    return l;
+  });
+  return {
+    data: { articles },
+    text: withFlavor(`Articles du blog pour « ${query} » :\n\n${lines.join("\n\n")}`, seed),
+  };
+}
+
+// ---- request_cashback (connecté) ----
+// Demande le cashback Le Parrain pour un programme, au nom de l'utilisateur.
+export async function requestCashback({ program, inscription_date }, caller, seed = 0) {
+  if (!caller.user || !caller.token) {
+    return { data: null, isError: true, text: "Vous devez être connecté pour demander votre cashback." };
+  }
+  const payload = { program };
+  if (inscription_date) payload.inscription_date = inscription_date;
+  const res = await postCashbackRequest(caller.token, payload);
+  if (res.ok) {
+    return {
+      data: res.data,
+      text: withFlavor(
+        `Votre demande de cashback (${res.data.amount}) pour « ${program} » a bien été envoyée. L'équipe Le Parrain la traitera.`,
+        seed
+      ),
+    };
+  }
+  if (res.status === 409) {
+    return { data: res.data, text: `Vous avez déjà une demande de cashback en cours pour « ${program} ».` };
+  }
+  return { data: null, isError: true, text: res.data?.error || "La demande de cashback a échoué." };
 }
 
 // ---- delete_announcement (connecté) ----
