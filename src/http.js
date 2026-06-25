@@ -23,6 +23,8 @@ import { validateToken } from "./backend.js";
 const PORT = Number(process.env.PORT || process.env.MCP_HTTP_PORT || 3005);
 const MCP_PATH = process.env.MCP_PATH || "/mcp";
 const PLATFORM_OWNER = process.env.LP_PLATFORM_OWNER || "antoine";
+// Base publique pour le défi OAuth (resource_metadata du 401).
+const PUBLIC_BASE = (process.env.LP_PUBLIC_BASE || "https://leparrain.com").replace(/\/+$/, "");
 
 function send(res, status, obj) {
   const body = JSON.stringify(obj);
@@ -75,16 +77,54 @@ const server = http.createServer(async (req, res) => {
     return send(res, 404, { error: "not_found", hint: `Le endpoint MCP est ${MCP_PATH}` });
   }
 
-  // En stateless, seul POST porte du JSON-RPC. GET/DELETE ne sont pas utilisés.
-  if (req.method === "GET") {
+  // Préflight CORS (au cas où un client navigateur sonde) — sans auth.
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, {
+      "access-control-allow-origin": "*",
+      "access-control-allow-methods": "POST, OPTIONS",
+      "access-control-allow-headers": "authorization, content-type, mcp-protocol-version",
+    });
+    return res.end();
+  }
+
+  // ── Authentification (spec d'auth MCP) ──────────────────────────
+  // Token via header `Authorization: Bearer` (OAuth « Se connecter ») OU `?k=`
+  // (lien legacy). Sans token valide → 401 + WWW-Authenticate pointant vers les
+  // métadonnées de ressource → le connecteur (Claude/ChatGPT) lance le flow
+  // OAuth et nous renvoie ensuite un Bearer.
+  const authz = req.headers["authorization"] || "";
+  const bearer = authz.startsWith("Bearer ") ? authz.slice(7).trim() : "";
+  const token = bearer || url.searchParams.get("k") || "";
+  const identity = token ? await validateToken(token) : null;
+  if (!identity?.user_id) {
+    const meta = `${PUBLIC_BASE}/.well-known/oauth-protected-resource`;
+    res.writeHead(401, {
+      "www-authenticate": `Bearer resource_metadata="${meta}"`,
+      "content-type": "application/json",
+    });
+    return res.end(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        error: { code: -32001, message: "Authentification requise : connectez-vous à Le Parrain." },
+        id: null,
+      })
+    );
+  }
+  const caller = {
+    user: identity.user_id,
+    email: identity.email,
+    emailConfirmed: identity.email_confirmed,
+    platformOwner: PLATFORM_OWNER,
+    token,
+  };
+
+  // En stateless, seul POST porte du JSON-RPC.
+  if (req.method !== "POST") {
     return send(res, 405, {
       jsonrpc: "2.0",
       error: { code: -32000, message: "Method Not Allowed: utilisez POST (mode stateless)." },
       id: null,
     });
-  }
-  if (req.method !== "POST") {
-    return send(res, 405, { error: "method_not_allowed" });
   }
 
   const body = await readJsonBody(req);
@@ -96,22 +136,6 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
-  // Identité via token personnel passé dans l'URL du connecteur (?k=...).
-  // Sans token → anonyme (lien plateforme par défaut).
-  const token = url.searchParams.get("k");
-  let caller = { user: null, platformOwner: PLATFORM_OWNER };
-  if (token) {
-    const identity = await validateToken(token);
-    if (identity?.user_id) {
-      caller = {
-        user: identity.user_id,
-        email: identity.email,
-        emailConfirmed: identity.email_confirmed,
-        platformOwner: PLATFORM_OWNER,
-        token,
-      };
-    }
-  }
   const mcp = buildServer({ caller });
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined, // stateless
