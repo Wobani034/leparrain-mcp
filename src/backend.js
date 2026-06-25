@@ -22,12 +22,19 @@ function mapApiProgram(p) {
   if (p.logo_url) {
     logoUrl = p.logo_url.startsWith("http") ? p.logo_url : `${PUBLIC_BASE}${p.logo_url}`;
   }
+  // L'API renvoie referral_link = VRAI lien de parrainage OU, à défaut, le site
+  // officiel (fallback). On ne traite comme « lien de parrainage » que le vrai
+  // (has_referral_link=true) ; sinon il n'y a PAS encore de parrain.
+  const hasReferralLink = !!p.has_referral_link;
   return {
     slug: p.slug,
     name: p.name,
     category: p.category,
     description: p.description,
-    ownerLink: p.referral_link || null,
+    ownerLink: hasReferralLink ? p.referral_link || null : null,
+    hasReferralLink,
+    officialUrl: hasReferralLink ? null : p.referral_link || null,
+    linkSource: p.link_source || null,
     referralCode: p.referral_code || null,
     sponsorReward: p.sponsor_reward || null,
     refereeReward: p.referral_reward || null,

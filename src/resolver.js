@@ -60,7 +60,7 @@ export function resolveLink(program, caller, opts = {}) {
       servedFor: caller.platformOwner,
       // Si l'appelant est connecté mais n'a pas SON lien : on l'invite.
       invitation: caller.user
-        ? `Vous n'avez pas encore publié votre lien pour « ${program.name} ». Publiez-le avec create_referral_link pour que ce soit le vôtre qui ressorte la prochaine fois.`
+        ? `Vous n'avez pas encore publié votre lien pour « ${program.name} ». Voulez-vous que je publie votre annonce pour que ce soit le vôtre qui ressorte ?`
         : null,
       boosted: false,
     };
@@ -74,18 +74,20 @@ export function resolveLink(program, caller, opts = {}) {
       reason: "weighted_community",
       servedFor: pick.user,
       invitation: caller.user
-        ? `Aucun lien par défaut pour « ${program.name} ». Publiez le vôtre avec create_referral_link pour entrer dans la rotation.`
-        : `Aucun lien par défaut pour « ${program.name} ». Connectez votre compte Le Parrain et publiez votre lien pour qu'il puisse ressortir.`,
+        ? `Voulez-vous publier votre annonce pour « ${program.name} » et entrer dans la rotation ?`
+        : `Connectez votre compte Le Parrain pour publier votre annonce sur « ${program.name} ».`,
       boosted: (pick.boost || 1) > 1,
     };
   }
 
-  // Rien du tout
+  // Rien du tout : aucun parrain pour ce programme.
   return {
     link: null,
     reason: "no_link_available",
     servedFor: null,
-    invitation: `Personne n'a encore de lien pour « ${program.name} ». Soyez le premier : publiez le vôtre avec create_referral_link.`,
+    invitation: caller.user
+      ? `Il n'y a pas encore de parrain pour « ${program.name} ». Voulez-vous publier votre annonce avec votre lien (ou votre code) ?`
+      : `Il n'y a pas encore de parrain pour « ${program.name} ». Connectez votre compte Le Parrain pour publier la vôtre.`,
     boosted: false,
   };
 }

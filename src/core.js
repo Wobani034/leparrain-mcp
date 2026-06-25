@@ -70,20 +70,24 @@ export async function searchPrograms({ query }, caller, seed = 0) {
   const enriched = ordered.map((p) => {
     const res = resolveLink(p, caller);
     const own = myLinks[p.slug]?.referral_url || null;
+    const link = own || res.link; // null = pas encore de parrain
     const desc = (p.description || "").trim();
     return {
       slug: p.slug,
       name: p.name,
       category: p.category,
       description: desc.length > 160 ? desc.slice(0, 157) + "…" : desc,
-      referralLink: own || res.link,
+      referralLink: link,
+      hasSponsor: !!link,
       isOwn: !!own,
       sponsored: !!p.boosted,
     };
   });
 
   const lines = enriched.map((e) => {
-    let l = `• ${e.name} (${e.category}) — ${e.referralLink || "aucun lien pour l'instant"}`;
+    let l = `• ${e.name} (${e.category})`;
+    if (e.referralLink) l += ` — ${e.referralLink}${e.isOwn ? " (votre lien)" : ""}`;
+    else l += ` — pas encore de parrain (vous pouvez publier la vôtre)`;
     if (e.description) l += `\n  ${e.description}`;
     return l;
   });
@@ -117,14 +121,20 @@ export async function getProgram({ slug }, caller, seed = 0) {
   }
   const res = resolveLink(p, caller);
   const own = caller.token ? (await fetchMyLinks(caller.token))[p.slug]?.referral_url : null;
-  const link = own || res.link;
+  const link = own || res.link; // null = aucun parrain pour ce programme
 
   const body = [`${p.name} — ${p.category}`, "", p.description];
   // Détails de récompense quand l'annuaire les connaît.
   if (p.refereeReward) body.push("", `Pour vous (filleul) : ${p.refereeReward}`);
   if (p.sponsorReward) body.push(`Pour le parrain : ${p.sponsorReward}`);
   if (p.cashback) body.push(`Cashback Le Parrain : ${p.cashback}`);
-  body.push("", `Lien à partager : ${link || "aucun lien disponible pour l'instant"}`);
+  if (link) {
+    body.push("", `Lien à partager : ${link}${own ? " (c'est le vôtre)" : ""}`);
+  } else {
+    // Pas encore de parrain : on invite à publier. On NE présente PAS le site
+    // officiel comme un lien de parrainage.
+    body.push("", res.invitation);
+  }
   if (p.logoUrl) body.push("", `Logo : ${p.logoUrl}`);
 
   return {
@@ -134,7 +144,9 @@ export async function getProgram({ slug }, caller, seed = 0) {
       category: p.category,
       description: p.description,
       referralLink: link,
+      hasSponsor: !!link,
       isOwn: !!own,
+      invitation: link ? null : res.invitation,
       cashback: p.cashback || null,
       logoUrl: p.logoUrl || null,
       authenticated: !!caller.user,
