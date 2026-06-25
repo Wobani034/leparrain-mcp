@@ -131,6 +131,46 @@ export async function publishAnnouncement(token, payload) {
   }
 }
 
+/** Modifie l'annonce de l'utilisateur pour un programme. {ok, status, data}. */
+export async function patchAnnouncement(token, payload) {
+  if (!API_BASE) return { ok: false, status: 0, data: { error: "API indisponible" } };
+  try {
+    const r = await lpFetch("/api/mcp/announcements", {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+        accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, data };
+  } catch (e) {
+    return { ok: false, status: 0, data: { error: String(e) } };
+  }
+}
+
+/** Supprime l'annonce de l'utilisateur pour un programme. {ok, status, data}. */
+export async function removeAnnouncement(token, program) {
+  if (!API_BASE) return { ok: false, status: 0, data: { error: "API indisponible" } };
+  try {
+    const r = await lpFetch("/api/mcp/announcements", {
+      method: "DELETE",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+        accept: "application/json",
+      },
+      body: JSON.stringify({ program }),
+    });
+    const data = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, data };
+  } catch (e) {
+    return { ok: false, status: 0, data: { error: String(e) } };
+  }
+}
+
 // Liens de parrainage PUBLIÉS par l'utilisateur du token, indexés par slug.
 // Sert à faire ressortir SON lien plutôt que le lien plateforme. Cache 30 s.
 const linksCache = new Map(); // token -> { links, exp }

@@ -13,6 +13,8 @@ import {
   getProgram,
   suggestProgram,
   createAnnouncement,
+  updateAnnouncement,
+  deleteAnnouncement,
 } from "./core.js";
 
 // Instructions de STYLE envoyées au modèle (le client les transmet au LLM).
@@ -92,6 +94,36 @@ export function buildServer({ caller }) {
         },
       },
       async (args) => toResult(await createAnnouncement(args, caller, seed++))
+    );
+
+    server.registerTool(
+      "update_announcement",
+      {
+        title: "Modifier mon annonce de parrainage",
+        description:
+          "Modifie votre annonce existante pour un programme (titre, texte, lien ou code). Seuls les champs fournis sont changés.",
+        inputSchema: {
+          program: z.string().describe("Identifiant du programme (slug)."),
+          title: z.string().optional().describe("Nouveau titre."),
+          content: z.string().optional().describe("Nouveau texte (vouvoiement)."),
+          referral_url: z.string().optional().describe("Nouveau lien de parrainage (https)."),
+          referral_code: z.string().optional().describe("Nouveau code de parrainage."),
+        },
+      },
+      async (args) => toResult(await updateAnnouncement(args, caller, seed++))
+    );
+
+    server.registerTool(
+      "delete_announcement",
+      {
+        title: "Supprimer mon annonce de parrainage",
+        description:
+          "Supprime votre annonce pour un programme. Action définitive.",
+        inputSchema: {
+          program: z.string().describe("Identifiant du programme (slug)."),
+        },
+      },
+      async (args) => toResult(await deleteAnnouncement(args, caller, seed++))
     );
   }
 

@@ -9,6 +9,8 @@ import {
   fetchPrograms,
   fetchProgramBySlug,
   publishAnnouncement,
+  patchAnnouncement,
+  removeAnnouncement,
   fetchMyLinks,
 } from "./backend.js";
 import { resolveLink } from "./resolver.js";
@@ -255,4 +257,50 @@ export async function createAnnouncement(
     return { data: res.data, text: `Vous avez déjà une annonce pour « ${program} ».` };
   }
   return { data: null, isError: true, text: res.data?.error || "La publication de l'annonce a échoué." };
+}
+
+// ---- update_announcement (connecté) ----
+// Modifie l'annonce existante de l'utilisateur (uniquement les champs fournis).
+export async function updateAnnouncement(
+  { program, title, content, referral_url, referral_code },
+  caller,
+  seed = 0
+) {
+  if (!caller.user || !caller.token) {
+    return { data: null, isError: true, text: "Vous devez être connecté pour modifier votre annonce." };
+  }
+  const payload = { program };
+  if (title !== undefined) payload.title = title;
+  if (content !== undefined) payload.content = content;
+  if (referral_url !== undefined) payload.referral_url = referral_url;
+  if (referral_code !== undefined) payload.referral_code = referral_code;
+  if (referral_url || referral_code) {
+    payload.referral_type = referral_url && referral_code ? "BOTH" : referral_code ? "CODE" : "LINK";
+  }
+  const res = await patchAnnouncement(caller.token, payload);
+  if (res.ok) {
+    return {
+      data: res.data,
+      text: withFlavor(`C'est modifié. Votre annonce pour « ${program} » est à jour : ${res.data.url}`, seed),
+    };
+  }
+  if (res.status === 404) {
+    return { data: null, isError: true, text: `Vous n'avez pas encore d'annonce pour « ${program} ». Publiez-en une d'abord.` };
+  }
+  return { data: null, isError: true, text: res.data?.error || "La modification a échoué." };
+}
+
+// ---- delete_announcement (connecté) ----
+export async function deleteAnnouncement({ program }, caller, seed = 0) {
+  if (!caller.user || !caller.token) {
+    return { data: null, isError: true, text: "Vous devez être connecté pour supprimer votre annonce." };
+  }
+  const res = await removeAnnouncement(caller.token, program);
+  if (res.ok) {
+    return { data: res.data, text: withFlavor(`Votre annonce pour « ${program} » a été supprimée.`, seed) };
+  }
+  if (res.status === 404) {
+    return { data: null, isError: true, text: `Vous n'avez pas d'annonce pour « ${program} ».` };
+  }
+  return { data: null, isError: true, text: res.data?.error || "La suppression a échoué." };
 }
