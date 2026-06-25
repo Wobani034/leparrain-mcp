@@ -5,7 +5,12 @@
 // ─────────────────────────────────────────────────────────────
 
 import { findProgramBySlug, communityLinks, moderationQueue } from "./data.js";
-import { fetchPrograms, fetchProgramBySlug, publishAnnouncement } from "./backend.js";
+import {
+  fetchPrograms,
+  fetchProgramBySlug,
+  publishAnnouncement,
+  fetchMyLinks,
+} from "./backend.js";
 import { resolveLink } from "./resolver.js";
 import { withFlavor } from "./flavor.js";
 import { timeBucket, orderSponsored } from "./boost.js";
@@ -54,14 +59,19 @@ export async function searchPrograms({ query }, caller, seed = 0) {
     appendLedger({ ts: now(), seed: bucket, query, slots, featured: featured?.slug ?? null });
   }
 
+  // Si la personne est connectée, on fait ressortir SON lien (issu de son
+  // annonce publiée) plutôt que le lien plateforme par défaut.
+  const myLinks = caller.token ? await fetchMyLinks(caller.token) : {};
+
   const enriched = ordered.map((p) => {
     const res = resolveLink(p, caller);
+    const own = myLinks[p.slug]?.referral_url || null;
     return {
       slug: p.slug,
       name: p.name,
       category: p.category,
-      referralLink: res.link,
-      reason: res.reason,
+      referralLink: own || res.link,
+      isOwn: !!own,
       sponsored: !!p.boosted,
     };
   });
@@ -98,17 +108,16 @@ export async function getProgram({ slug }, caller, seed = 0) {
     };
   }
   const res = resolveLink(p, caller);
-  const body = [
-    `${p.name} — ${p.category}`,
-    "",
-    p.description,
-  ];
+  const own = caller.token ? (await fetchMyLinks(caller.token))[p.slug]?.referral_url : null;
+  const link = own || res.link;
+
+  const body = [`${p.name} — ${p.category}`, "", p.description];
   // Détails de récompense quand l'annuaire les connaît.
   if (p.refereeReward) body.push("", `Pour vous (filleul) : ${p.refereeReward}`);
   if (p.sponsorReward) body.push(`Pour le parrain : ${p.sponsorReward}`);
-  if (p.cashback) body.push(`Cashback : ${p.cashback}`);
-  if (p.referralCode) body.push("", `Code parrain : ${p.referralCode}`);
-  body.push("", `Lien à partager : ${res.link || "aucun lien disponible pour l'instant"}`);
+  if (p.cashback) body.push(`Cashback Le Parrain : ${p.cashback}`);
+  body.push("", `Lien à partager : ${link || "aucun lien disponible pour l'instant"}`);
+  if (p.logoUrl) body.push("", `Logo : ${p.logoUrl}`);
 
   return {
     data: {
@@ -116,9 +125,10 @@ export async function getProgram({ slug }, caller, seed = 0) {
       name: p.name,
       category: p.category,
       description: p.description,
-      referralLink: res.link,
-      reason: res.reason,
-      boosted: res.boosted,
+      referralLink: link,
+      isOwn: !!own,
+      cashback: p.cashback || null,
+      logoUrl: p.logoUrl || null,
       authenticated: !!caller.user,
     },
     text: withFlavor(body.join("\n"), seed),

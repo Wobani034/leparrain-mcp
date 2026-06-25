@@ -12,10 +12,16 @@ import { searchProgramsRaw, findProgramBySlug } from "./data.js";
 const MODE = process.env.LP_DATA_MODE || "sample";
 const API_BASE = process.env.LP_API_BASE_URL || "";
 const TIMEOUT_MS = Number(process.env.LP_API_TIMEOUT_MS || 8000);
+// Base PUBLIQUE (pour transformer un logo_url relatif en URL affichable).
+const PUBLIC_BASE = process.env.LP_PUBLIC_URL || "https://leparrain.com";
 
 // Normalise un programme renvoyé par l'API LP vers la forme attendue par le
 // resolver / les tools (notamment `ownerLink` = lien plateforme par défaut).
 function mapApiProgram(p) {
+  let logoUrl = null;
+  if (p.logo_url) {
+    logoUrl = p.logo_url.startsWith("http") ? p.logo_url : `${PUBLIC_BASE}${p.logo_url}`;
+  }
   return {
     slug: p.slug,
     name: p.name,
@@ -26,6 +32,7 @@ function mapApiProgram(p) {
     sponsorReward: p.sponsor_reward || null,
     refereeReward: p.referral_reward || null,
     cashback: p.cashback || null,
+    logoUrl,
     boosted: !!p.is_boosted,
   };
 }
@@ -121,5 +128,24 @@ export async function publishAnnouncement(token, payload) {
     return { ok: r.ok, status: r.status, data };
   } catch (e) {
     return { ok: false, status: 0, data: { error: String(e) } };
+  }
+}
+
+// Liens de parrainage PUBLIÉS par l'utilisateur du token, indexés par slug.
+// Sert à faire ressortir SON lien plutôt que le lien plateforme. Cache 30 s.
+const linksCache = new Map(); // token -> { links, exp }
+export async function fetchMyLinks(token) {
+  if (!token || MODE !== "api" || !API_BASE) return {};
+  const cached = linksCache.get(token);
+  if (cached && cached.exp > Date.now()) return cached.links;
+  try {
+    const r = await lpFetch("/api/mcp/me/links", {
+      headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+    });
+    const links = r.ok ? (await r.json()).links || {} : {};
+    linksCache.set(token, { links, exp: Date.now() + 30_000 });
+    return links;
+  } catch {
+    return {};
   }
 }

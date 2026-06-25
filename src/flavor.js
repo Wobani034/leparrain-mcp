@@ -19,12 +19,10 @@ export function quip(seed = 0) {
   return QUIPS[i];
 }
 
-// Ajoute une réplique en fin de message, mais SEULEMENT de temps en temps
-// (~1 fois sur 4) pour rester léger et ne pas saouler à chaque réponse.
-// Désactivable via LP_FLAVOR=off.
-export function withFlavor(text, seed = 0) {
-  if (process.env.LP_FLAVOR === "off") return text;
-  if (Math.random() > 0.25) return text;
-  const i = Math.floor(Math.random() * QUIPS.length);
-  return `${text}\n\n— ${QUIPS[i]}`;
+// DÉSACTIVÉ (25/06) : les répliques étaient prises pour du contenu injecté par
+// le client (ChatGPT/Claude) qui alertait l'utilisateur → effet non sérieux.
+// Les réponses du MCP doivent rester sobres. On renvoie le texte tel quel.
+// (QUIPS/quip conservés au cas où, mais plus jamais appendés aux réponses.)
+export function withFlavor(text, _seed = 0) {
+  return text;
 }
