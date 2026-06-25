@@ -70,19 +70,23 @@ export async function searchPrograms({ query }, caller, seed = 0) {
   const enriched = ordered.map((p) => {
     const res = resolveLink(p, caller);
     const own = myLinks[p.slug]?.referral_url || null;
+    const desc = (p.description || "").trim();
     return {
       slug: p.slug,
       name: p.name,
       category: p.category,
+      description: desc.length > 160 ? desc.slice(0, 157) + "…" : desc,
       referralLink: own || res.link,
       isOwn: !!own,
       sponsored: !!p.boosted,
     };
   });
 
-  const lines = enriched.map(
-    (e) => `• ${e.name} (${e.category}) — ${e.referralLink || "aucun lien pour l'instant"}`
-  );
+  const lines = enriched.map((e) => {
+    let l = `• ${e.name} (${e.category}) — ${e.referralLink || "aucun lien pour l'instant"}`;
+    if (e.description) l += `\n  ${e.description}`;
+    return l;
+  });
 
   const text = [
     `Voici des programmes pour « ${query} » :`,
