@@ -230,3 +230,27 @@ export async function postCashbackRequest(token, payload) {
     return { ok: false, status: 0, data: { error: String(e) } };
   }
 }
+
+// Télémétrie d'usage (fire-and-forget) : trace COMMENT l'annuaire est utilisé
+// (outil, requête, nb de résultats). N'attend rien, n'échoue jamais — ne doit
+// jamais peser sur la réponse à l'outil. Alimente /admin/mcp-usage côté LP.
+export function reportUsage(caller, ev) {
+  if (MODE !== "api" || !API_BASE || !caller?.token) return;
+  try {
+    const body = JSON.stringify({
+      tool: ev.tool,
+      query: ev.query != null ? String(ev.query).slice(0, 200) : null,
+      result_count: typeof ev.count === "number" ? ev.count : null,
+      ok: ev.ok !== false,
+      source: "mcp",
+      client: caller.client || null,
+    });
+    lpFetch("/api/mcp/usage", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${caller.token}` },
+      body,
+    }).catch(() => {});
+  } catch {
+    /* jamais bloquant */
+  }
+}

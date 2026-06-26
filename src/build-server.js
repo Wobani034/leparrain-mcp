@@ -18,6 +18,7 @@ import {
   searchBlog,
   requestCashback,
 } from "./core.js";
+import { reportUsage } from "./backend.js";
 
 // Instructions de STYLE envoyées au modèle (le client les transmet au LLM).
 // But : conversation humaine, vouvoiement, zéro jargon, et exactitude sur
@@ -57,6 +58,15 @@ export function buildServer({ caller }) {
   );
   let seed = 0; // varie la réplique humoristique d'un appel à l'autre
 
+  // Enrobe un appel d'outil : exécute, trace l'usage (fire-and-forget), renvoie
+  // le résultat MCP. `query` = la requête/slug significatif pour les stats.
+  async function run(tool, query, work) {
+    const r = await work;
+    const count = Array.isArray(r?.data?.results) ? r.data.results.length : undefined;
+    reportUsage(caller, { tool, query, count, ok: !r?.isError });
+    return toResult(r);
+  }
+
   server.registerTool(
     "search_programs",
     {
@@ -67,7 +77,7 @@ export function buildServer({ caller }) {
         query: z.string().describe("Mot-clé : nom de marque, catégorie, secteur…"),
       },
     },
-    async ({ query }) => toResult(await searchPrograms({ query }, caller, seed++))
+    async ({ query }) => run("search_programs", query, searchPrograms({ query }, caller, seed++))
   );
 
   server.registerTool(
@@ -80,7 +90,7 @@ export function buildServer({ caller }) {
         slug: z.string().describe("Identifiant du programme (ex: 'qonto'). Voir search_programs."),
       },
     },
-    async ({ slug }) => toResult(await getProgram({ slug }, caller, seed++))
+    async ({ slug }) => run("get_program", slug, getProgram({ slug }, caller, seed++))
   );
 
   server.registerTool(
@@ -93,7 +103,7 @@ export function buildServer({ caller }) {
         query: z.string().describe("Sujet ou mot-clé (ex: 'meilleure banque', 'cashback')."),
       },
     },
-    async ({ query }) => toResult(await searchBlog({ query }, caller, seed++))
+    async ({ query }) => run("search_blog", query, searchBlog({ query }, caller, seed++))
   );
 
   // Outil d'écriture réservé aux appelants CONNECTÉS (token personnel). En
@@ -113,7 +123,7 @@ export function buildServer({ caller }) {
           referral_code: z.string().optional().describe("Votre code de parrainage."),
         },
       },
-      async (args) => toResult(await createAnnouncement(args, caller, seed++))
+      async (args) => run("create_announcement", args.program, createAnnouncement(args, caller, seed++))
     );
 
     server.registerTool(
@@ -130,7 +140,7 @@ export function buildServer({ caller }) {
           referral_code: z.string().optional().describe("Nouveau code de parrainage."),
         },
       },
-      async (args) => toResult(await updateAnnouncement(args, caller, seed++))
+      async (args) => run("update_announcement", args.program, updateAnnouncement(args, caller, seed++))
     );
 
     server.registerTool(
@@ -143,7 +153,7 @@ export function buildServer({ caller }) {
           program: z.string().describe("Identifiant du programme (slug)."),
         },
       },
-      async (args) => toResult(await deleteAnnouncement(args, caller, seed++))
+      async (args) => run("delete_announcement", args.program, deleteAnnouncement(args, caller, seed++))
     );
 
     server.registerTool(
@@ -160,7 +170,7 @@ export function buildServer({ caller }) {
             .describe("Date d'inscription au programme (AAAA-MM-JJ), optionnel."),
         },
       },
-      async (args) => toResult(await requestCashback(args, caller, seed++))
+      async (args) => run("request_cashback", args.program, requestCashback(args, caller, seed++))
     );
   }
 
@@ -177,7 +187,7 @@ export function buildServer({ caller }) {
       },
     },
     async ({ name, url, category }) =>
-      toResult(suggestProgram({ name, url, category }, caller, seed++))
+      run("suggest_program", name, suggestProgram({ name, url, category }, caller, seed++))
   );
 
   return server;

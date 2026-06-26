@@ -116,6 +116,7 @@ const server = http.createServer(async (req, res) => {
     emailConfirmed: identity.email_confirmed,
     platformOwner: PLATFORM_OWNER,
     token,
+    client: req.headers["user-agent"] || null,
   };
 
   // En stateless, seul POST porte du JSON-RPC.
