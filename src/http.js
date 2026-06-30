@@ -49,7 +49,7 @@ a.btn{display:inline-block;margin-top:1rem;background:linear-gradient(135deg,var
 <ol><li>Réglages → <strong>Connecteurs</strong> → <em>Ajouter un connecteur personnalisé</em>.</li>
 <li>Collez l'adresse <code>https://leparrain.com/mcp</code>.</li>
 <li>Cliquez sur <strong>« Se connecter »</strong> et identifiez-vous avec votre compte Le Parrain.</li></ol>
-<a class="btn" href="https://leparrain.com">Aller sur Le Parrain</a>
+<a class="btn" href="https://leparrain.com/connecteur-ia">Comment ça marche</a>
 <div class="foot">Vous cherchiez le site ? <a href="https://leparrain.com">leparrain.com</a></div>
 </div></body></html>`;
 
