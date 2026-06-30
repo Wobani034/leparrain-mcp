@@ -26,6 +26,33 @@ const PLATFORM_OWNER = process.env.LP_PLATFORM_OWNER || "antoine";
 // Base publique pour le défi OAuth (resource_metadata du 401).
 const PUBLIC_BASE = (process.env.LP_PUBLIC_BASE || "https://leparrain.com").replace(/\/+$/, "");
 
+// Page affichée à un NAVIGATEUR qui ouvre /mcp à la main (humain), au lieu du
+// JSON 401 réservé aux assistants. Les clients MCP (Accept: application/json)
+// continuent de recevoir le défi 401.
+const LANDING_HTML = `<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<title>Connecteur IA — Le Parrain</title><style>
+:root{--bg:#0b1220;--card:#121a2b;--fg:#e8eef9;--muted:#9fb0c9;--primary:#3B82F6;--accent:#00D4FF;--border:#1f2b40}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:1.5rem}
+.card{max-width:34rem;background:var(--card);border:1px solid var(--border);border-radius:1rem;padding:2rem}
+h1{margin:.2rem 0 .6rem;font-size:1.45rem}
+.badge{display:inline-block;font-size:.7rem;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);border:1px solid var(--border);border-radius:999px;padding:.2rem .6rem}
+p{color:var(--muted);line-height:1.6}ol{color:var(--muted);line-height:1.8;padding-left:1.2rem}
+code{background:#0b1220;border:1px solid var(--border);border-radius:.4rem;padding:.15rem .4rem;color:var(--fg);font-size:.85em}
+a.btn{display:inline-block;margin-top:1rem;background:linear-gradient(135deg,var(--primary),var(--accent));color:#04121f;font-weight:600;text-decoration:none;padding:.6rem 1.1rem;border-radius:.6rem}
+.foot{margin-top:1.4rem;font-size:.82rem;color:var(--muted)}.foot a{color:var(--accent)}
+</style></head><body><div class="card">
+<span class="badge">Connecteur IA</span>
+<h1>Le Parrain — connecteur pour assistants</h1>
+<p>Cette adresse permet à un assistant IA (Claude, ChatGPT) d'interroger l'annuaire de parrainage Le Parrain et d'y publier vos liens. Elle n'est pas faite pour être ouverte dans un navigateur — d'où ce message.</p>
+<p style="color:var(--fg)"><strong>Pour l'utiliser dans Claude :</strong></p>
+<ol><li>Réglages → <strong>Connecteurs</strong> → <em>Ajouter un connecteur personnalisé</em>.</li>
+<li>Collez l'adresse <code>https://leparrain.com/mcp</code>.</li>
+<li>Cliquez sur <strong>« Se connecter »</strong> et identifiez-vous avec votre compte Le Parrain.</li></ol>
+<a class="btn" href="https://leparrain.com">Aller sur Le Parrain</a>
+<div class="foot">Vous cherchiez le site ? <a href="https://leparrain.com">leparrain.com</a></div>
+</div></body></html>`;
+
 function send(res, status, obj) {
   const body = JSON.stringify(obj);
   res.writeHead(status, {
@@ -85,6 +112,14 @@ const server = http.createServer(async (req, res) => {
       "access-control-allow-headers": "authorization, content-type, mcp-protocol-version",
     });
     return res.end();
+  }
+
+  // Visite NAVIGATEUR (humain) : page d'explication au lieu du JSON 401. Les
+  // clients MCP envoient Accept: application/json/event-stream → ils passent à
+  // l'auth ci-dessous et reçoivent le défi 401.
+  if (req.method === "GET" && (req.headers["accept"] || "").includes("text/html")) {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end(LANDING_HTML);
   }
 
   // ── Authentification (spec d'auth MCP) ──────────────────────────
