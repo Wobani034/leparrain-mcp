@@ -11,6 +11,7 @@ import { z } from "zod";
 import {
   searchPrograms,
   getProgram,
+  getBestReferral,
   suggestProgram,
   createAnnouncement,
   updateAnnouncement,
@@ -91,6 +92,19 @@ export function buildServer({ caller }) {
       },
     },
     async ({ slug }) => run("get_program", slug, getProgram({ slug }, caller, seed++))
+  );
+
+  server.registerTool(
+    "get_best_referral",
+    {
+      title: "Meilleur lien de parrainage pour une marque",
+      description:
+        "Donne LE meilleur lien de parrainage à utiliser pour une marque précise, avec la priorité Le Parrain déjà appliquée (votre lien si vous êtes connecté et l'avez publié, sinon le lien de parrainage de la plateforme, sinon un parrain de la communauté). À appeler dès que la personne veut « le meilleur lien », « le lien à utiliser » ou « le bon lien de parrainage » pour un programme donné.",
+      inputSchema: {
+        slug: z.string().describe("Identifiant du programme (ex: 'qonto'). Voir search_programs."),
+      },
+    },
+    async ({ slug }) => run("get_best_referral", slug, getBestReferral({ slug }, caller, seed++))
   );
 
   server.registerTool(

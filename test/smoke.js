@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import {
   searchPrograms,
   getProgram,
+  getBestReferral,
   createReferralLink,
   suggestProgram,
 } from "../src/core.js";
@@ -87,6 +88,30 @@ console.log("\nTools & garde-fous :");
   const out = await getProgram({ slug: "nexiste-pas" }, ANON);
   assert.equal(out.isError, true);
   ok("get_program inconnu → erreur lisible");
+}
+
+// get_best_referral : anonyme → lien plateforme (le lien d'Antoine)
+{
+  const out = await getBestReferral({ slug: "qonto" }, ANON);
+  assert.equal(out.data.is_own, false);
+  assert.match(out.data.referral_link, /ref=antoine/);
+  assert.ok(out.text.includes("ref=antoine"));
+  ok("get_best_referral anonyme → lien plateforme");
+}
+
+// get_best_referral : connectée avec lien publié → SON lien (is_own=true)
+{
+  const out = await getBestReferral({ slug: "qonto" }, MARIE);
+  assert.equal(out.data.is_own, true);
+  assert.equal(out.data.referral_link, "https://qonto.com/r/marie-42");
+  ok("get_best_referral connectée avec lien → SON lien (is_own)");
+}
+
+// get_best_referral : programme inconnu → erreur propre
+{
+  const out = await getBestReferral({ slug: "nexiste-pas" }, ANON);
+  assert.equal(out.isError, true);
+  ok("get_best_referral inconnu → erreur lisible");
 }
 
 // create_referral_link : anonyme refusé

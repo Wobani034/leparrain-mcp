@@ -15,7 +15,7 @@ import {
   fetchArticles,
   postCashbackRequest,
 } from "./backend.js";
-import { resolveLink } from "./resolver.js";
+import { resolveLink, explainReason } from "./resolver.js";
 import { withFlavor } from "./flavor.js";
 import { timeBucket, orderSponsored } from "./boost.js";
 import { appendLedger } from "./ledger.js";
@@ -149,6 +149,51 @@ export async function getProgram({ slug }, caller, seed = 0) {
       invitation: link ? null : res.invitation,
       cashback: p.cashback || null,
       logoUrl: p.logoUrl || null,
+      authenticated: !!caller.user,
+    },
+    text: withFlavor(body.join("\n"), seed),
+  };
+}
+
+// ---- get_best_referral ----
+// Point d'entrée DÉDIÉ « donne-moi le meilleur lien de parrainage pour X ».
+// Applique la priorité maison via resolveLink (lien de l'utilisateur connecté
+// s'il en a publié un → lien plateforme → tirage communauté pondéré) et rend
+// une réponse claire + un texte humain. Accessible aux anonymes ET connectés.
+export async function getBestReferral({ slug }, caller, seed = 0) {
+  const p = await fetchProgramBySlug(slug);
+  if (!p) {
+    return {
+      data: null,
+      isError: true,
+      text: `Je ne trouve pas ce programme. Faites une recherche par nom pour tomber sur la bonne fiche.`,
+    };
+  }
+  const res = resolveLink(p, caller);
+  // En mode api, le lien perso vient de l'annonce publiée (fetchMyLinks) ; en
+  // sample il est déjà porté par resolveLink. On fait ressortir le lien perso.
+  const own = caller.token ? (await fetchMyLinks(caller.token))[p.slug]?.referral_url : null;
+  const link = own || res.link; // null = aucun parrain pour ce programme
+  const isOwn = !!own || res.reason === "user_own_link";
+
+  const body = [`Meilleur lien de parrainage pour ${p.name} (${p.category}) :`];
+  if (link) {
+    body.push("", `${link}${isOwn ? " (c'est le vôtre)" : ""}`);
+  } else {
+    // Pas encore de parrain : on invite à publier, sans inventer de lien.
+    body.push("", res.invitation);
+  }
+  if (p.cashback) body.push("", `Cashback Le Parrain : ${p.cashback}`);
+
+  return {
+    data: {
+      program: { slug: p.slug, name: p.name, category: p.category },
+      referral_link: link,
+      reason: explainReason(res, p),
+      is_own: isOwn,
+      boosted: !!res.boosted,
+      invitation: link ? null : res.invitation,
+      cashback: p.cashback || null,
       authenticated: !!caller.user,
     },
     text: withFlavor(body.join("\n"), seed),
