@@ -211,6 +211,57 @@ export async function fetchArticles(query) {
   }
 }
 
+/**
+ * Récupère le bilan gains de l'utilisateur du token (IpCoins + cashback).
+ * GET authentifié /api/mcp/me/earnings. En mode sample, renvoie un objet vide
+ * plausible (aucun accès réseau). Renvoie {ok, status, data}.
+ */
+export async function fetchMyEarnings(token) {
+  if (MODE !== "api" || !API_BASE) {
+    return {
+      ok: true,
+      status: 200,
+      data: {
+        ipcoins: { balance: 0, total_earned: 0, total_spent: 0 },
+        recent_transactions: [],
+        cashback: { total: 0, by_status: {}, requests: [] },
+      },
+    };
+  }
+  try {
+    const r = await lpFetch("/api/mcp/me/earnings", {
+      headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+    });
+    const data = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, data };
+  } catch (e) {
+    return { ok: false, status: 0, data: { error: String(e) } };
+  }
+}
+
+/**
+ * Demande un brouillon d'annonce pour un programme.
+ * POST authentifié /api/mcp/draft-announcement. Renvoie {ok, status, data}.
+ */
+export async function draftAnnouncement(token, { program, notes }) {
+  if (!API_BASE) return { ok: false, status: 0, data: { error: "API indisponible" } };
+  try {
+    const r = await lpFetch("/api/mcp/draft-announcement", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+        accept: "application/json",
+      },
+      body: JSON.stringify({ program, ...(notes ? { notes } : {}) }),
+    });
+    const data = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, data };
+  } catch (e) {
+    return { ok: false, status: 0, data: { error: String(e) } };
+  }
+}
+
 /** Crée une demande de cashback au nom du token. Renvoie {ok, status, data}. */
 export async function postCashbackRequest(token, payload) {
   if (!API_BASE) return { ok: false, status: 0, data: { error: "API indisponible" } };

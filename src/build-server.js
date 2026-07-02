@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// Fabrique du serveur MCP : enregistre les 4 tools sur une instance
+// Fabrique du serveur MCP : enregistre les tools sur une instance
 // McpServer. Partagé par les deux transports :
 //   - src/server.js  → stdio  (install locale)
 //   - src/http.js    → HTTP   (serveur remote, URL à coller)
@@ -12,12 +12,15 @@ import {
   searchPrograms,
   getProgram,
   getBestReferral,
+  comparePrograms,
   suggestProgram,
   createAnnouncement,
   updateAnnouncement,
   deleteAnnouncement,
   searchBlog,
   requestCashback,
+  getMyEarnings,
+  draftAnnouncement,
 } from "./core.js";
 import { reportUsage } from "./backend.js";
 
@@ -108,6 +111,21 @@ export function buildServer({ caller }) {
   );
 
   server.registerTool(
+    "compare_programs",
+    {
+      title: "Comparer deux programmes de parrainage",
+      description:
+        "Compare deux programmes de parrainage côte à côte : récompenses (filleul et parrain), cashback Le Parrain, et meilleur lien de parrainage résolu pour chacun (le vôtre en priorité si vous êtes connecté et l'avez publié). À utiliser dès que la personne veut « comparer » deux marques ou choisir entre deux offres.",
+      inputSchema: {
+        slug_a: z.string().describe("Identifiant du 1er programme (slug, ex: 'qonto')."),
+        slug_b: z.string().describe("Identifiant du 2e programme (slug, ex: 'boursobank')."),
+      },
+    },
+    async ({ slug_a, slug_b }) =>
+      run("compare_programs", `${slug_a}+${slug_b}`, comparePrograms({ slug_a, slug_b }, caller, seed++))
+  );
+
+  server.registerTool(
     "search_blog",
     {
       title: "Chercher dans le blog",
@@ -185,6 +203,34 @@ export function buildServer({ caller }) {
         },
       },
       async (args) => run("request_cashback", args.program, requestCashback(args, caller, seed++))
+    );
+
+    server.registerTool(
+      "get_my_earnings",
+      {
+        title: "Consulter mes gains",
+        description:
+          "Récapitule vos gains sur Le Parrain : solde d'IpCoins (gagnés / dépensés) et cashback (montant cumulé, répartition par statut et détail de vos demandes). Lecture seule.",
+        inputSchema: {},
+      },
+      async () => run("get_my_earnings", null, getMyEarnings({}, caller, seed++))
+    );
+
+    server.registerTool(
+      "draft_announcement",
+      {
+        title: "Préparer un brouillon d'annonce",
+        description:
+          "Prépare un brouillon d'annonce de parrainage (titre + texte, en vouvoiement) pour un programme, à relire avant publication. NE PUBLIE RIEN : une fois le brouillon validé, publiez-le avec create_announcement.",
+        inputSchema: {
+          program: z.string().describe("Identifiant du programme (slug, ex: 'boursobank')."),
+          notes: z
+            .string()
+            .optional()
+            .describe("Consignes ou points à mettre en avant dans l'annonce (optionnel)."),
+        },
+      },
+      async (args) => run("draft_announcement", args.program, draftAnnouncement(args, caller, seed++))
     );
   }
 

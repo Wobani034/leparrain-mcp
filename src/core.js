@@ -14,6 +14,8 @@ import {
   fetchMyLinks,
   fetchArticles,
   postCashbackRequest,
+  fetchMyEarnings,
+  draftAnnouncement as draftAnnouncementApi,
 } from "./backend.js";
 import { resolveLink, explainReason } from "./resolver.js";
 import { withFlavor } from "./flavor.js";
@@ -197,6 +199,77 @@ export async function getBestReferral({ slug }, caller, seed = 0) {
       authenticated: !!caller.user,
     },
     text: withFlavor(body.join("\n"), seed),
+  };
+}
+
+// ---- compare_programs ----
+// Compare deux programmes côte à côte : récompenses, cashback et meilleur lien
+// de parrainage résolu pour chacun (même priorité maison que get_best_referral).
+// Accessible aux anonymes ET aux connectés.
+async function resolveComparableSide(slug, caller) {
+  const p = await fetchProgramBySlug(slug);
+  if (!p) return { slug, found: false };
+  const res = resolveLink(p, caller);
+  const own = caller.token ? (await fetchMyLinks(caller.token))[p.slug]?.referral_url : null;
+  const link = own || res.link; // null = aucun parrain pour ce programme
+  const isOwn = !!own || res.reason === "user_own_link";
+  return {
+    found: true,
+    slug: p.slug,
+    name: p.name,
+    category: p.category,
+    sponsor_reward: p.sponsorReward || null,
+    referral_reward: p.refereeReward || null,
+    cashback: p.cashback || null,
+    referral_link: link,
+    is_own: isOwn,
+    invitation: link ? null : res.invitation,
+  };
+}
+
+export async function comparePrograms({ slug_a, slug_b }, caller, seed = 0) {
+  const [a, b] = await Promise.all([
+    resolveComparableSide(slug_a, caller),
+    resolveComparableSide(slug_b, caller),
+  ]);
+
+  const missing = [!a.found ? slug_a : null, !b.found ? slug_b : null].filter(Boolean);
+  if (missing.length) {
+    return {
+      data: null,
+      isError: true,
+      text:
+        missing.length === 2
+          ? `Je ne trouve ni « ${slug_a} » ni « ${slug_b} ». Faites une recherche par nom pour tomber sur les bonnes fiches.`
+          : `Je ne trouve pas « ${missing[0]} ». Faites une recherche par nom pour tomber sur la bonne fiche.`,
+    };
+  }
+
+  // Bloc lisible par programme, mis en regard.
+  function block(side) {
+    const rows = [`${side.name} (${side.category})`];
+    if (side.referral_reward) rows.push(`  Pour vous (filleul) : ${side.referral_reward}`);
+    if (side.sponsor_reward) rows.push(`  Pour le parrain : ${side.sponsor_reward}`);
+    rows.push(`  Cashback Le Parrain : ${side.cashback ? side.cashback : "aucun"}`);
+    if (side.referral_link) {
+      rows.push(`  Lien à partager : ${side.referral_link}${side.is_own ? " (le vôtre)" : ""}`);
+    } else {
+      rows.push(`  Pas encore de parrain pour ce programme.`);
+    }
+    return rows.join("\n");
+  }
+
+  const text = [
+    `Comparatif ${a.name} / ${b.name} :`,
+    "",
+    block(a),
+    "",
+    block(b),
+  ].join("\n");
+
+  return {
+    data: { a, b, authenticated: !!caller.user },
+    text: withFlavor(text, seed),
   };
 }
 
@@ -413,4 +486,100 @@ export async function deleteAnnouncement({ program }, caller, seed = 0) {
     return { data: null, isError: true, text: `Vous n'avez pas d'annonce pour « ${program} ».` };
   }
   return { data: null, isError: true, text: res.data?.error || "La suppression a échoué." };
+}
+
+// Libellés lisibles des statuts de cashback (fallback = valeur brute).
+const CASHBACK_STATUS_LABELS = {
+  pending: "en attente",
+  processing: "en cours de traitement",
+  approved: "approuvé",
+  paid: "payé",
+  rejected: "refusé",
+};
+function cashbackStatusLabel(status) {
+  if (!status) return "statut inconnu";
+  return CASHBACK_STATUS_LABELS[String(status).toLowerCase()] || String(status);
+}
+
+// ---- get_my_earnings (connecté) ----
+// Récapitule les gains de l'utilisateur : solde IpCoins + cashback (par statut
+// et détail des demandes). Lecture seule, réservée aux appelants connectés.
+export async function getMyEarnings(_args, caller, seed = 0) {
+  if (!caller.user || !caller.token) {
+    return { data: null, isError: true, text: "Vous devez être connecté pour consulter vos gains." };
+  }
+  const res = await fetchMyEarnings(caller.token);
+  if (!res.ok) {
+    return { data: null, isError: true, text: res.data?.error || "La récupération de vos gains a échoué." };
+  }
+  const d = res.data || {};
+  const ip = d.ipcoins || {};
+  const cb = d.cashback || {};
+  const byStatus = cb.by_status || {};
+  const requests = Array.isArray(cb.requests) ? cb.requests : [];
+
+  const lines = [
+    `Solde IpCoins : ${ip.balance ?? 0}`,
+  ];
+  if (ip.total_earned != null || ip.total_spent != null) {
+    lines.push(`  (gagnés : ${ip.total_earned ?? 0} · dépensés : ${ip.total_spent ?? 0})`);
+  }
+
+  lines.push("", `Cashback cumulé : ${cb.total ?? 0}`);
+  const statusEntries = Object.entries(byStatus);
+  if (statusEntries.length) {
+    lines.push("Par statut :");
+    for (const [status, amount] of statusEntries) {
+      lines.push(`  • ${cashbackStatusLabel(status)} : ${amount}`);
+    }
+  }
+  if (requests.length) {
+    lines.push("Demandes :");
+    for (const r of requests) {
+      const label = r.program_name || r.program || "programme";
+      lines.push(`  • ${label} — ${r.amount ?? "?"} (${cashbackStatusLabel(r.status)})`);
+    }
+  } else {
+    lines.push("Aucune demande de cashback pour l'instant.");
+  }
+
+  return {
+    data: d,
+    text: withFlavor(lines.join("\n"), seed),
+  };
+}
+
+// ---- draft_announcement (connecté) ----
+// Génère un brouillon d'annonce (titre + texte) pour un programme, à relire
+// avant publication. NE PUBLIE RIEN : c'est un simple brouillon.
+export async function draftAnnouncement({ program, notes }, caller, seed = 0) {
+  if (!caller.user || !caller.token) {
+    return { data: null, isError: true, text: "Vous devez être connecté pour préparer un brouillon d'annonce." };
+  }
+  const res = await draftAnnouncementApi(caller.token, { program, notes });
+  if (res.ok) {
+    const draft = res.data?.draft || {};
+    const body = [
+      `Voici un brouillon d'annonce pour « ${res.data?.program || program} » :`,
+      "",
+      draft.title ? `Titre : ${draft.title}` : null,
+      draft.content ? `\n${draft.content}` : null,
+      "",
+      "Relisez-le puis publiez-le via create_announcement si cela vous convient.",
+    ].filter((l) => l !== null);
+    return {
+      data: res.data,
+      text: withFlavor(body.join("\n"), seed),
+    };
+  }
+  if (res.status === 503) {
+    return { data: null, isError: true, text: "La génération de brouillon est momentanément indisponible. Réessayez dans un instant." };
+  }
+  if (res.status === 404) {
+    return { data: null, isError: true, text: `Je ne trouve pas le programme « ${program} ». Vérifiez le nom ou faites une recherche.` };
+  }
+  if (res.status === 422) {
+    return { data: null, isError: true, text: res.data?.error || "Le brouillon doit être rédigé en vouvoiement. Reformulez vos consignes." };
+  }
+  return { data: null, isError: true, text: res.data?.error || "La préparation du brouillon a échoué." };
 }

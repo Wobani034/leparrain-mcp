@@ -9,11 +9,13 @@ import {
   searchPrograms,
   getProgram,
   getBestReferral,
+  comparePrograms,
   createReferralLink,
   suggestProgram,
 } from "../src/core.js";
 import { resolveLink } from "../src/resolver.js";
 import { findProgramBySlug } from "../src/data.js";
+import { buildServer } from "../src/build-server.js";
 
 const ANON = { user: null, platformOwner: "antoine" };
 const MARIE = { user: "marie", platformOwner: "antoine" };
@@ -114,6 +116,26 @@ console.log("\nTools & garde-fous :");
   ok("get_best_referral inconnu → erreur lisible");
 }
 
+// compare_programs : deux programmes connus → comparaison des deux côtés
+{
+  const out = await comparePrograms({ slug_a: "qonto", slug_b: "boursobank" }, ANON);
+  assert.ok(!out.isError);
+  assert.equal(out.data.a.slug, "qonto");
+  assert.equal(out.data.b.slug, "boursobank");
+  assert.match(out.data.a.referral_link, /ref=antoine/);
+  assert.match(out.data.b.referral_link, /ref=antoine/);
+  assert.ok(out.text.includes("Qonto") && out.text.includes("BoursoBank"));
+  ok("compare_programs deux programmes connus → comparaison");
+}
+
+// compare_programs : un slug inconnu → erreur lisible mentionnant le manquant
+{
+  const out = await comparePrograms({ slug_a: "qonto", slug_b: "nexiste-pas" }, ANON);
+  assert.equal(out.isError, true);
+  assert.ok(out.text.includes("nexiste-pas"));
+  ok("compare_programs slug inconnu → erreur lisible");
+}
+
 // create_referral_link : anonyme refusé
 {
   const out = createReferralLink(
@@ -153,6 +175,31 @@ console.log("\nTools & garde-fous :");
   const inSearch = await searchPrograms({ query: "Revolut" }, ANON);
   assert.equal(inSearch.data.results.length, 0, "ne doit PAS apparaître avant modération");
   ok("suggest_program → modération, pas de publication auto");
+}
+
+console.log("\nGating des outils connectés (sans réseau) :");
+
+// Les tools réservés aux connectés ne sont PAS enregistrés en anonyme, mais le
+// sont dès qu'il y a un utilisateur (token). On introspecte le registre MCP.
+{
+  const anonServer = buildServer({ caller: { user: null, platformOwner: "antoine" } });
+  const connServer = buildServer({
+    caller: { user: "marie", token: "tok-test", platformOwner: "antoine" },
+  });
+  const anonTools = Object.keys(anonServer._registeredTools);
+  const connTools = Object.keys(connServer._registeredTools);
+
+  assert.ok(!anonTools.includes("get_my_earnings"), "get_my_earnings absent en anonyme");
+  assert.ok(!anonTools.includes("draft_announcement"), "draft_announcement absent en anonyme");
+  ok("get_my_earnings & draft_announcement absents en anonyme");
+
+  assert.ok(connTools.includes("get_my_earnings"), "get_my_earnings présent en connecté");
+  assert.ok(connTools.includes("draft_announcement"), "draft_announcement présent en connecté");
+  ok("get_my_earnings & draft_announcement présents en connecté");
+
+  // compare_programs est hors gate → présent dans les deux.
+  assert.ok(anonTools.includes("compare_programs") && connTools.includes("compare_programs"));
+  ok("compare_programs disponible en anonyme ET en connecté");
 }
 
 console.log(`\n✅ ${pass} assertions passées. C'est du sssolide !\n`);
