@@ -206,11 +206,18 @@ export async function getBestReferral({ slug }, caller, seed = 0) {
 // Compare deux programmes côte à côte : récompenses, cashback et meilleur lien
 // de parrainage résolu pour chacun (même priorité maison que get_best_referral).
 // Accessible aux anonymes ET aux connectés.
-async function resolveComparableSide(slug, caller) {
-  const p = await fetchProgramBySlug(slug);
+async function resolveComparableSide(slug, caller, myLinks) {
+  let p;
+  try {
+    p = await fetchProgramBySlug(slug);
+  } catch {
+    // API LP 5xx/timeout → traité comme introuvable (message lisible plutôt
+    // qu'une erreur JSON-RPC brute remontée au modèle).
+    return { slug, found: false };
+  }
   if (!p) return { slug, found: false };
   const res = resolveLink(p, caller);
-  const own = caller.token ? (await fetchMyLinks(caller.token))[p.slug]?.referral_url : null;
+  const own = myLinks[p.slug]?.referral_url || null;
   const link = own || res.link; // null = aucun parrain pour ce programme
   const isOwn = !!own || res.reason === "user_own_link";
   return {
@@ -228,9 +235,12 @@ async function resolveComparableSide(slug, caller) {
 }
 
 export async function comparePrograms({ slug_a, slug_b }, caller, seed = 0) {
+  // Résout la map des liens perso UNE fois (évite 2 requêtes /me/links parallèles
+  // à froid) puis la passe aux deux côtés.
+  const myLinks = caller.token ? await fetchMyLinks(caller.token).catch(() => ({})) : {};
   const [a, b] = await Promise.all([
-    resolveComparableSide(slug_a, caller),
-    resolveComparableSide(slug_b, caller),
+    resolveComparableSide(slug_a, caller, myLinks),
+    resolveComparableSide(slug_b, caller, myLinks),
   ]);
 
   const missing = [!a.found ? slug_a : null, !b.found ? slug_b : null].filter(Boolean);
@@ -525,7 +535,7 @@ export async function getMyEarnings(_args, caller, seed = 0) {
     lines.push(`  (gagnés : ${ip.total_earned ?? 0} · dépensés : ${ip.total_spent ?? 0})`);
   }
 
-  lines.push("", `Cashback cumulé : ${cb.total ?? 0}`);
+  lines.push("", `Demandes de cashback : ${cb.total ?? 0}`);
   const statusEntries = Object.entries(byStatus);
   if (statusEntries.length) {
     lines.push("Par statut :");
@@ -559,6 +569,11 @@ export async function draftAnnouncement({ program, notes }, caller, seed = 0) {
   const res = await draftAnnouncementApi(caller.token, { program, notes });
   if (res.ok) {
     const draft = res.data?.draft || {};
+    // Un 200 sans titre ni contenu = génération vide : ne pas présenter un
+    // brouillon creux comme un succès.
+    if (!draft.title && !draft.content) {
+      return { data: null, isError: true, text: "La génération n'a rien produit pour le moment. Réessayez dans un instant." };
+    }
     const body = [
       `Voici un brouillon d'annonce pour « ${res.data?.program || program} » :`,
       "",

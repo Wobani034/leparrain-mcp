@@ -244,7 +244,8 @@ export async function fetchMyEarnings(token) {
  * POST authentifié /api/mcp/draft-announcement. Renvoie {ok, status, data}.
  */
 export async function draftAnnouncement(token, { program, notes }) {
-  if (!API_BASE) return { ok: false, status: 0, data: { error: "API indisponible" } };
+  // Écriture réseau uniquement : pas de branche sample (cohérent avec fetchMyEarnings).
+  if (MODE !== "api" || !API_BASE) return { ok: false, status: 0, data: { error: "API indisponible" } };
   try {
     const r = await lpFetch("/api/mcp/draft-announcement", {
       method: "POST",
