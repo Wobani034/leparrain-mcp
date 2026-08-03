@@ -18,7 +18,7 @@ import http from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { buildServer } from "./build-server.js";
 import { readLedger } from "./ledger.js";
-import { validateToken } from "./backend.js";
+import { validateToken, BACKEND_UNAVAILABLE } from "./backend.js";
 
 const PORT = Number(process.env.PORT || process.env.MCP_HTTP_PORT || 3005);
 const MCP_PATH = process.env.MCP_PATH || "/mcp";
@@ -131,6 +131,22 @@ const server = http.createServer(async (req, res) => {
   const bearer = authz.startsWith("Bearer ") ? authz.slice(7).trim() : "";
   const token = bearer || url.searchParams.get("k") || "";
   const identity = token ? await validateToken(token) : null;
+  // LP injoignable : c'est une panne de NOTRE côté, pas un token périmé. On
+  // répond 503 (retryable) et SURTOUT pas 401 + WWW-Authenticate, qui ferait
+  // jeter la session au connecteur et obligerait à recliquer « Se connecter ».
+  if (identity === BACKEND_UNAVAILABLE) {
+    res.writeHead(503, { "retry-after": "10", "content-type": "application/json" });
+    return res.end(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        error: {
+          code: -32000,
+          message: "Le Parrain est momentanément indisponible. Réessayez dans quelques instants.",
+        },
+        id: null,
+      })
+    );
+  }
   if (!identity?.user_id) {
     const meta = `${PUBLIC_BASE}/.well-known/oauth-protected-resource`;
     res.writeHead(401, {

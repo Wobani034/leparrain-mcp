@@ -101,21 +101,48 @@ async function lpFetch(pathname, init) {
   }
 }
 
-/** Valide un token personnel → identité {user_id, email, email_confirmed} ou null. */
+/**
+ * Sentinelle : leparrain.com est injoignable (5xx, timeout, réseau coupé).
+ * ⚠️ À NE JAMAIS traiter comme « token invalide » : un 401 renvoyé au connecteur
+ * dans ce cas lui fait JETER la session, et l'utilisateur doit se reconnecter à
+ * la main. C'est ce qui se produisait à chaque redémarrage PM2 du site.
+ */
+export const BACKEND_UNAVAILABLE = Symbol("lp_backend_unavailable");
+
+/**
+ * Valide un token personnel. Trois issues distinctes :
+ *   - identité {user_id, email, email_confirmed} → token valide (cache 60 s) ;
+ *   - null → LP a répondu 401/403, le token est RÉELLEMENT invalide (cache 15 s) ;
+ *   - BACKEND_UNAVAILABLE → LP est HS ou lent (jamais mis en cache).
+ */
 export async function validateToken(token) {
   if (!token || MODE !== "api" || !API_BASE) return null;
   const cached = tokenCache.get(token);
   if (cached && cached.exp > Date.now()) return cached.identity;
+  let r;
   try {
-    const r = await lpFetch("/api/mcp/me", {
+    r = await lpFetch("/api/mcp/me", {
       headers: { authorization: `Bearer ${token}`, accept: "application/json" },
     });
-    const identity = r.ok ? await r.json() : null;
-    tokenCache.set(token, { identity, exp: Date.now() + (identity ? 60_000 : 15_000) });
-    return identity;
   } catch {
+    return BACKEND_UNAVAILABLE; // timeout / DNS / connexion refusée
+  }
+  // Seul LP peut décréter qu'un token ne vaut rien. Le reste (500, 502, 503,
+  // 429, page d'erreur nginx pendant un deploy) est transitoire.
+  if (r.status === 401 || r.status === 403) {
+    tokenCache.set(token, { identity: null, exp: Date.now() + 15_000 });
     return null;
   }
+  if (!r.ok) return BACKEND_UNAVAILABLE;
+  let identity;
+  try {
+    identity = await r.json();
+  } catch {
+    return BACKEND_UNAVAILABLE; // 200 mais corps illisible = LP à moitié debout
+  }
+  if (!identity?.user_id) return BACKEND_UNAVAILABLE;
+  tokenCache.set(token, { identity, exp: Date.now() + 60_000 });
+  return identity;
 }
 
 /** Publie une annonce au nom du token. Renvoie {ok, status, data}. */
