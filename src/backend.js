@@ -310,6 +310,85 @@ export async function postCashbackRequest(token, payload) {
   }
 }
 
+/**
+ * Liste les programmes Pro publics qu'un utilisateur connecté peut recommander.
+ * GET authentifié /api/mcp/pro/programs. En mode sample, renvoie une liste
+ * vide plausible et n'effectue aucun accès réseau.
+ */
+export async function fetchProPrograms(token) {
+  if (MODE !== "api" || !API_BASE) {
+    return { ok: true, status: 200, data: { programs: [] } };
+  }
+  try {
+    const r = await lpFetch("/api/mcp/pro/programs", {
+      headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+    });
+    const data = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, data };
+  } catch (e) {
+    return { ok: false, status: 0, data: { error: String(e) } };
+  }
+}
+
+/**
+ * Transmet une recommandation de contact consentie.
+ * POST authentifié /api/mcp/pro/referrals. Le submission_id dans le corps rend
+ * les retries idempotents côté Le Parrain.
+ */
+export async function postProReferral(token, payload) {
+  if (MODE !== "api" || !API_BASE) {
+    return { ok: false, status: 0, data: { error: "API indisponible" } };
+  }
+  try {
+    const r = await lpFetch("/api/mcp/pro/referrals", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+        accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, data };
+  } catch (e) {
+    return { ok: false, status: 0, data: { error: String(e) } };
+  }
+}
+
+/**
+ * Consulte les commissions Pro de l'utilisateur connecté.
+ * GET authentifié /api/mcp/pro/commissions. En mode sample, renvoie un bilan
+ * vide plausible et n'effectue aucun accès réseau.
+ */
+export async function fetchMyCommissions(token) {
+  if (MODE !== "api" || !API_BASE) {
+    return {
+      ok: true,
+      status: 200,
+      data: {
+        summary: {
+          total_referrals: 0,
+          by_status: {},
+          indicative_declared_amount: 0,
+          indicative_confirmed_amount: 0,
+          currency: "EUR",
+        },
+        commissions: [],
+      },
+    };
+  }
+  try {
+    const r = await lpFetch("/api/mcp/pro/commissions", {
+      headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+    });
+    const data = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, data };
+  } catch (e) {
+    return { ok: false, status: 0, data: { error: String(e) } };
+  }
+}
+
 // Télémétrie d'usage (fire-and-forget) : trace COMMENT l'annuaire est utilisé
 // (outil, requête, nb de résultats). N'attend rien, n'échoue jamais — ne doit
 // jamais peser sur la réponse à l'outil. Alimente /admin/mcp-usage côté LP.

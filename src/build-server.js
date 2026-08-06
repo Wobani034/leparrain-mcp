@@ -21,6 +21,9 @@ import {
   requestCashback,
   getMyEarnings,
   draftAnnouncement,
+  listProPrograms,
+  recommendContact,
+  getMyCommissions,
 } from "./core.js";
 import { reportUsage } from "./backend.js";
 
@@ -33,6 +36,7 @@ Style de réponse OBLIGATOIRE :
 - Répondez comme un humain, en français, en vouvoyant la personne. Naturel et BREF.
 - Pour une demande de lien OU de code : donnez simplement le lien de parrainage ("Voici votre lien de parrainage : …"). N'expliquez PAS la différence technique entre lien et code, ne dites pas que le code est "encodé dans le lien".
 - Si un programme propose un cashback Le Parrain, signalez-le en une phrase, et proposez simplement de faire la demande : "Voulez-vous que je demande votre cashback ?" (sans nommer d'outil). N'effectuez la demande qu'après accord.
+- Ne transmettez JAMAIS les coordonnées d'un contact sans confirmation explicite de l'utilisateur ET sans que celui-ci confirme que le contact a consenti à cette transmission.
 - Vous avez accès aux articles du blog Le Parrain (conseils, comparatifs) : utilisez-les pour répondre aux questions plus larges qu'une simple recherche de programme.
 - Si une image/logo est fournie, vous pouvez l'afficher.
 - Quand la personne est connectée et que le lien servi n'est pas le sien, vous POUVEZ proposer, en une phrase simple : "Voulez-vous que je publie votre propre lien de parrainage pour ce programme ?" — sans JAMAIS nommer d'outil/fonction, ni expliquer le fonctionnement (annonce, annuaire, modération, résolution de lien…).
@@ -231,6 +235,57 @@ export function buildServer({ caller }) {
         },
       },
       async (args) => run("draft_announcement", args.program, draftAnnouncement(args, caller, seed++))
+    );
+
+    server.registerTool(
+      "list_pro_programs",
+      {
+        title: "Consulter les programmes de recommandation",
+        description:
+          "Liste les programmes partenaires actuellement ouverts aux recommandations de contacts. Lecture seule.",
+        inputSchema: {},
+      },
+      async () => run("list_pro_programs", null, listProPrograms({}, caller, seed++))
+    );
+
+    server.registerTool(
+      "recommend_contact",
+      {
+        title: "Recommander un contact",
+        description:
+          "Transmet un contact à un programme professionnel. À appeler UNIQUEMENT après confirmation explicite de l'utilisateur ET après confirmation que le contact a consenti à la transmission de ses coordonnées.",
+        inputSchema: {
+          submission_id: z
+            .string()
+            .uuid()
+            .describe("UUID unique généré pour cette soumission, réutilisé à l'identique en cas de retry."),
+          program: z
+            .string()
+            .min(1)
+            .max(200)
+            .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+            .describe("Slug du programme professionnel choisi."),
+          prospect_first_name: z.string().min(2).max(100).describe("Prénom du contact ayant consenti."),
+          prospect_last_name: z.string().min(2).max(100).describe("Nom du contact ayant consenti."),
+          prospect_email: z.string().email().max(320).optional().describe("Email du contact ; requis si aucun téléphone."),
+          prospect_phone: z.string().min(1).max(30).optional().describe("Téléphone du contact ; requis si aucun email."),
+          need: z.string().min(10).max(2000).describe("Besoin exprimé par le contact."),
+          comment: z.string().max(2000).optional().describe("Commentaire complémentaire facultatif."),
+          consent: z.literal(true).describe("Doit valoir true : le contact a explicitement consenti."),
+        },
+      },
+      async (args) => run("recommend_contact", args.program, recommendContact(args, caller, seed++))
+    );
+
+    server.registerTool(
+      "get_my_commissions",
+      {
+        title: "Consulter mes commissions de recommandation",
+        description:
+          "Récapitule les commissions liées à vos recommandations professionnelles. Lecture seule.",
+        inputSchema: {},
+      },
+      async () => run("get_my_commissions", null, getMyCommissions({}, caller, seed++))
     );
   }
 

@@ -12,6 +12,7 @@ import {
   comparePrograms,
   createReferralLink,
   suggestProgram,
+  recommendContact,
 } from "../src/core.js";
 import { resolveLink } from "../src/resolver.js";
 import { findProgramBySlug } from "../src/data.js";
@@ -179,6 +180,37 @@ console.log("\nTools & garde-fous :");
 
 console.log("\nGating des outils connectés (sans réseau) :");
 
+// recommend_contact garde le consentement et les coordonnées même lors d'un
+// appel direct à la logique métier (en plus du schéma MCP).
+{
+  const base = {
+    submission_id: "6f93cb08-cc49-4b73-90e8-e0f30ecf7304",
+    program: "expert-comptable",
+    prospect_first_name: "Jean",
+    prospect_last_name: "Dupont",
+    need: "Cherche un accompagnement comptable.",
+  };
+  const connectedMarie = { ...MARIE, token: "tok-test" };
+  const noConsent = await recommendContact(
+    { ...base, prospect_email: "jean@example.com", consent: false },
+    connectedMarie
+  );
+  assert.equal(noConsent.isError, true);
+  assert.match(noConsent.text, /consenti/i);
+
+  const invalidSubmission = await recommendContact(
+    { ...base, submission_id: "pas-un-uuid", prospect_email: "jean@example.com", consent: true },
+    connectedMarie
+  );
+  assert.equal(invalidSubmission.isError, true);
+  assert.match(invalidSubmission.text, /UUID/i);
+
+  const noContact = await recommendContact({ ...base, consent: true }, connectedMarie);
+  assert.equal(noContact.isError, true);
+  assert.match(noContact.text, /email|téléphone/i);
+  ok("recommend_contact exige UUID, consentement et email ou téléphone");
+}
+
 // Les tools réservés aux connectés ne sont PAS enregistrés en anonyme, mais le
 // sont dès qu'il y a un utilisateur (token). On introspecte le registre MCP.
 {
@@ -189,13 +221,36 @@ console.log("\nGating des outils connectés (sans réseau) :");
   const anonTools = Object.keys(anonServer._registeredTools);
   const connTools = Object.keys(connServer._registeredTools);
 
-  assert.ok(!anonTools.includes("get_my_earnings"), "get_my_earnings absent en anonyme");
-  assert.ok(!anonTools.includes("draft_announcement"), "draft_announcement absent en anonyme");
-  ok("get_my_earnings & draft_announcement absents en anonyme");
+  const connectedOnly = [
+    "get_my_earnings",
+    "draft_announcement",
+    "list_pro_programs",
+    "recommend_contact",
+    "get_my_commissions",
+  ];
+  for (const tool of connectedOnly) {
+    assert.ok(!anonTools.includes(tool), `${tool} absent en anonyme`);
+    assert.ok(connTools.includes(tool), `${tool} présent en connecté`);
+  }
+  ok("outils personnels et Pro absents en anonyme");
+  ok("outils personnels et Pro présents en connecté");
 
-  assert.ok(connTools.includes("get_my_earnings"), "get_my_earnings présent en connecté");
-  assert.ok(connTools.includes("draft_announcement"), "draft_announcement présent en connecté");
-  ok("get_my_earnings & draft_announcement présents en connecté");
+  const forbiddenProManagementTools = [
+    "register_pro",
+    "create_pro_account",
+    "create_pro_program",
+    "update_pro_program",
+    "manage_pro_programs",
+  ];
+  for (const tool of forbiddenProManagementTools) {
+    assert.ok(!connTools.includes(tool), `${tool} ne doit pas être exposé`);
+  }
+  ok("aucun outil d'inscription ou de gestion Pro exposé");
+
+  const recommendDescription = connServer._registeredTools.recommend_contact.description;
+  assert.match(recommendDescription, /UNIQUEMENT après confirmation explicite/i);
+  assert.match(recommendDescription, /contact a consenti/i);
+  ok("recommend_contact documente la double confirmation obligatoire");
 
   // compare_programs est hors gate → présent dans les deux.
   assert.ok(anonTools.includes("compare_programs") && connTools.includes("compare_programs"));

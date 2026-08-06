@@ -16,7 +16,7 @@ parrainage**.
 ```bash
 npm install
 cp .env.example .env     # ajustez LP_USER pour simuler un appelant connecté
-npm run smoke            # tests de la logique (11 assertions)
+npm run smoke            # tests de la logique et des garde-fous
 npm start                # lance le serveur MCP (transport stdio)
 ```
 
@@ -31,7 +31,7 @@ aucune infra Le Parrain requise.
 | `LP_USER=marie` | **Connectée**, a déjà publié des liens → ses liens ressortent |
 | `LP_USER=zoe` | **Connectée** sans lien → lien plateforme + invitation à créer |
 
-## Les 4 tools
+## Outils principaux
 
 | Tool | Rôle |
 |------|------|
@@ -39,6 +39,13 @@ aucune infra Le Parrain requise.
 | `get_program` | Détail d'un programme + lien résolu |
 | `create_referral_link` | Publie **votre** lien (connecté, https, anti-doublon) |
 | `suggest_program` | Propose un programme → **modération** (pas de publication auto) |
+| `list_pro_programs` | Liste les programmes partenaires acceptant des recommandations (connecté) |
+| `recommend_contact` | Transmet un contact consentant après confirmation explicite (connecté) |
+| `get_my_commissions` | Suit les commissions de recommandation du compte (connecté) |
+
+Les outils de recommandation n'inscrivent et n'administrent aucun professionnel.
+Ils sont réservés à l'utilisateur connecté qui recommande un contact consentant,
+et ne renvoient pas les coordonnées du contact après l'envoi.
 
 La logique de choix du lien (« chaîne de résolution ») est décrite dans
 [`PLAN.md`](./PLAN.md).
@@ -88,7 +95,7 @@ npm run inspect
 ```
 src/
   server.js     # serveur MCP : branche les tools sur le protocole (stdio)
-  core.js       # logique métier pure des 4 tools (testable)
+  core.js       # logique métier pure des tools (testable)
   resolver.js   # chaîne de résolution du lien + tirage pondéré
   data.js       # dataset d'exemple (remplacé par l'API en couche 2)
   flavor.js     # la voix du Parrain (clins d'œil The Mask)

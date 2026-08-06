@@ -16,6 +16,9 @@ import {
   postCashbackRequest,
   fetchMyEarnings,
   draftAnnouncement as draftAnnouncementApi,
+  fetchProPrograms,
+  postProReferral,
+  fetchMyCommissions,
 } from "./backend.js";
 import { resolveLink, explainReason } from "./resolver.js";
 import { withFlavor } from "./flavor.js";
@@ -597,4 +600,160 @@ export async function draftAnnouncement({ program, notes }, caller, seed = 0) {
     return { data: null, isError: true, text: res.data?.error || "Le brouillon doit être rédigé en vouvoiement. Reformulez vos consignes." };
   }
   return { data: null, isError: true, text: res.data?.error || "La préparation du brouillon a échoué." };
+}
+
+// ---- list_pro_programs (connecté) ----
+// Liste en lecture seule les programmes Pro ouverts aux recommandations.
+export async function listProPrograms(_args, caller, seed = 0) {
+  if (!caller.user || !caller.token) {
+    return {
+      data: null,
+      isError: true,
+      text: "Vous devez être connecté pour consulter les programmes de recommandation.",
+    };
+  }
+  const res = await fetchProPrograms(caller.token);
+  if (!res.ok) {
+    return {
+      data: null,
+      isError: true,
+      text: res.data?.error || "La récupération des programmes de recommandation a échoué.",
+    };
+  }
+  const programs = Array.isArray(res.data?.programs) ? res.data.programs : [];
+  if (!programs.length) {
+    return {
+      data: { ...(res.data || {}), programs: [] },
+      text: "Aucun programme de recommandation n'est disponible pour le moment.",
+    };
+  }
+  const lines = programs.map((program) => {
+    const name = program.title || program.name || program.slug;
+    const companyName = program.company?.name || program.company_name;
+    const company = companyName ? ` — ${companyName}` : "";
+    const reward = program.reward_description || program.reward_amount;
+    return `• ${name}${company}${reward ? `\n  Récompense : ${reward}` : ""}`;
+  });
+  return {
+    data: res.data,
+    text: withFlavor(`Programmes de recommandation disponibles :\n\n${lines.join("\n\n")}`, seed),
+  };
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PROGRAM_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+// ---- recommend_contact (connecté + consentement explicite) ----
+// Cette fonction refait les validations sensibles côté logique métier, même si
+// le schéma MCP les applique déjà : aucun appel direct ne peut les contourner.
+export async function recommendContact(args, caller, seed = 0) {
+  if (!caller.user || !caller.token) {
+    return { data: null, isError: true, text: "Vous devez être connecté pour recommander un contact." };
+  }
+  if (args?.consent !== true) {
+    return {
+      data: null,
+      isError: true,
+      text: "Le contact doit avoir explicitement consenti à la transmission de ses coordonnées.",
+    };
+  }
+  if (!UUID_PATTERN.test(String(args?.submission_id || ""))) {
+    return { data: null, isError: true, text: "L'identifiant de soumission doit être un UUID valide." };
+  }
+  const program = String(args?.program || "").trim();
+  const prospectFirstName = String(args?.prospect_first_name || "").trim();
+  const prospectLastName = String(args?.prospect_last_name || "").trim();
+  const prospectEmail = String(args?.prospect_email || "").trim();
+  const prospectPhone = String(args?.prospect_phone || "").trim();
+  const need = String(args?.need || "").trim();
+  if (!program || !prospectFirstName || !prospectLastName || !need) {
+    return {
+      data: null,
+      isError: true,
+      text: "Indiquez le programme, l'identité complète du contact et son besoin.",
+    };
+  }
+  if (!PROGRAM_SLUG_PATTERN.test(program)) {
+    return { data: null, isError: true, text: "Le programme doit être indiqué avec son slug valide." };
+  }
+  if (!prospectEmail && !prospectPhone) {
+    return { data: null, isError: true, text: "Indiquez au moins l'email ou le téléphone du contact." };
+  }
+  const payload = {
+    submission_id: args.submission_id,
+    program,
+    prospect_first_name: prospectFirstName,
+    prospect_last_name: prospectLastName,
+    need,
+    consent: true,
+    ...(prospectEmail ? { prospect_email: prospectEmail } : {}),
+    ...(prospectPhone ? { prospect_phone: prospectPhone } : {}),
+    ...(args.comment?.trim() ? { comment: args.comment.trim() } : {}),
+  };
+  const res = await postProReferral(caller.token, payload);
+  if (res.ok) {
+    const referral = res.data?.referral || res.data || {};
+    const reference = referral.id ? ` (référence ${referral.id})` : "";
+    return {
+      data: res.data,
+      text: withFlavor(`La recommandation a bien été transmise${reference}.`, seed),
+    };
+  }
+  if (res.status === 409) {
+    return {
+      data: res.data,
+      isError: true,
+      text: res.data?.error || "Cette soumission existe déjà ou entre en conflit avec une recommandation existante.",
+    };
+  }
+  return {
+    data: null,
+    isError: true,
+    text: res.data?.error || "La transmission de la recommandation a échoué.",
+  };
+}
+
+const COMMISSION_STATUS_LABELS = {
+  new: "nouvelle",
+  qualifying: "en qualification",
+  accepted: "acceptée",
+  reward_due: "récompense à déclarer",
+  reward_declared: "récompense déclarée",
+  reward_confirmed: "récompense confirmée",
+  rejected: "refusée",
+  cancelled: "annulée",
+};
+
+// ---- get_my_commissions (connecté) ----
+export async function getMyCommissions(_args, caller, seed = 0) {
+  if (!caller.user || !caller.token) {
+    return { data: null, isError: true, text: "Vous devez être connecté pour consulter vos commissions." };
+  }
+  const res = await fetchMyCommissions(caller.token);
+  if (!res.ok) {
+    return {
+      data: null,
+      isError: true,
+      text: res.data?.error || "La récupération de vos commissions a échoué.",
+    };
+  }
+  const d = res.data || {};
+  const summary = d.summary || {};
+  const commissions = Array.isArray(d.commissions) ? d.commissions : [];
+  const currency = summary.currency || "EUR";
+  const lines = [
+    `Recommandations : ${summary.total_referrals ?? commissions.length}`,
+    `Montant indicatif déclaré : ${summary.indicative_declared_amount ?? 0} ${currency}`,
+    `Montant indicatif confirmé : ${summary.indicative_confirmed_amount ?? 0} ${currency}`,
+  ];
+  for (const commission of commissions) {
+    const program = commission.program?.title || commission.program_name || commission.program || "programme";
+    const amount = commission.advertised_reward_amount ?? commission.amount ?? "montant à confirmer";
+    const rawStatus = String(commission.status || "").toLowerCase();
+    const status = COMMISSION_STATUS_LABELS[rawStatus] || commission.status || "statut inconnu";
+    lines.push(`• ${program} — récompense annoncée : ${amount} (${status})`);
+  }
+  if (!commissions.length) lines.push("Aucune commission pour l'instant.");
+  if (summary.disclaimer) lines.push("", summary.disclaimer);
+  return { data: d, text: withFlavor(lines.join("\n"), seed) };
 }
