@@ -39,8 +39,7 @@ GP=$(post "$U" '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"
 has "A4 get_program boursobank → vrai lien bour.so" "$GP" 'bour.so'
 GP404=$(post "$U" '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"get_program","arguments":{"slug":"zzz-inexistant"}}}')
 has "A5 get_program inconnu → message d'erreur propre" "$GP404" 'trouve'
-SG=$(post "$U" '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"suggest_program","arguments":{"name":"ProtoTestBank"}}}')
-has "A6 suggest_program → modération (pas de publication auto)" "$SG" 'modération'
+hasnt "A6 suggest_program absent en anonyme" "$TOOLS" '"suggest_program"'
 
 echo "════════ B. BOOST AUDITABLE ════════"
 post "$U" '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"search_programs","arguments":{"query":"banque"}}}' >/dev/null
@@ -60,8 +59,7 @@ eq "B2 rejouabilité : recalcul == featured du journal" "$REPLAY" "MATCH"
 echo "════════ C. SÉCURITÉ AUTH ════════"
 BADTOK="lpm_token-invalide-de-test"   # volontairement faux (pas un secret)
 eq "C1 token bidon → /api/mcp/me 401" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/api/mcp/me -H "Authorization: Bearer $BADTOK")" "401"
-BADTOOLS=$(post "$U?k=$BADTOK" '{"jsonrpc":"2.0","id":8,"method":"tools/list"}')
-hasnt "C2 token invalide → reste anonyme (pas create_announcement)" "$BADTOOLS" '"create_announcement"'
+eq "C2 token invalide → défi OAuth 401" "$(code "$U?k=$BADTOK" '{"jsonrpc":"2.0","id":8,"method":"tools/list"}')" "401"
 
 echo "════════ D. CONNECTÉ — user de référence ($TEST_EMAIL) ════════"
 USERID=$(q "SELECT id FROM users WHERE email='$TEST_EMAIL'")

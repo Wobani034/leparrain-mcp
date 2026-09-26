@@ -37,8 +37,10 @@ aucune infra Le Parrain requise.
 |------|------|
 | `search_programs` | Cherche des programmes, renvoie le lien résolu pour vous |
 | `get_program` | Détail d'un programme + lien résolu |
-| `create_referral_link` | Publie **votre** lien (connecté, https, anti-doublon) |
-| `suggest_program` | Propose un programme → **modération** (pas de publication auto) |
+| `get_best_referral` | Donne le lien de parrainage résolu pour une marque |
+| `compare_programs` | Compare deux programmes et leurs liens |
+| `search_blog` | Cherche dans les articles publiés |
+| `create_announcement` | Publie **votre** annonce (compte connecté) |
 | `list_pro_programs` | Liste les programmes partenaires acceptant des recommandations (connecté) |
 | `recommend_contact` | Transmet un contact consentant après confirmation explicite (connecté) |
 | `get_my_commissions` | Suit les commissions de recommandation du compte (connecté) |
@@ -46,6 +48,9 @@ aucune infra Le Parrain requise.
 Les outils de recommandation n'inscrivent et n'administrent aucun professionnel.
 Ils sont réservés à l'utilisateur connecté qui recommande un contact consentant,
 et ne renvoient pas les coordonnées du contact après l'envoi.
+
+`suggest_program` n'est pas exposé par le serveur : sa file de modération
+actuelle est en mémoire et ne garantit pas la conservation d'une proposition.
 
 La logique de choix du lien (« chaîne de résolution ») est décrite dans
 [`PLAN.md`](./PLAN.md).
@@ -61,7 +66,12 @@ custom de ChatGPT / Claude.
 https://leparrain.com/mcp
 ```
 
-POC ouvert sans auth → appelant anonyme → lien plateforme par défaut.
+Sans connexion, les cinq outils de découverte en lecture seule sont disponibles :
+`search_programs`, `get_program`, `get_best_referral`, `compare_programs` et
+`search_blog`. Le lien servi est celui résolu pour un visiteur anonyme.
+Les outils personnels, de publication et de transmission de données exigent un
+compte Le Parrain connecté par OAuth. Un token fourni mais invalide déclenche
+un défi OAuth ; une panne de l'API renvoie une erreur temporaire.
 Endpoint de santé : `GET https://leparrain.com/mcp/health`.
 
 Déploiement (serveur Plesk) : process PM2 `leparrain-mcp` (`src/http.js`, port

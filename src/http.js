@@ -9,8 +9,8 @@
 // (enableJsonResponse) → passe proprement derrière Cloudflare/nginx,
 // sans complications de buffering SSE.
 //
-// POC : pas d'auth → appelant anonyme → lien plateforme par défaut.
-// L'auth par compte (clé API / OAuth) viendra en couche 2.
+// Lecture publique sans token ; les outils personnels restent réservés aux
+// appels authentifiés. Un token fourni mais invalide déclenche le défi OAuth.
 // ─────────────────────────────────────────────────────────────
 
 import "./env.js"; // DOIT rester en premier (charge .env avant les autres imports)
@@ -26,9 +26,8 @@ const PLATFORM_OWNER = process.env.LP_PLATFORM_OWNER || "antoine";
 // Base publique pour le défi OAuth (resource_metadata du 401).
 const PUBLIC_BASE = (process.env.LP_PUBLIC_BASE || "https://leparrain.com").replace(/\/+$/, "");
 
-// Page affichée à un NAVIGATEUR qui ouvre /mcp à la main (humain), au lieu du
-// JSON 401 réservé aux assistants. Les clients MCP (Accept: application/json)
-// continuent de recevoir le défi 401.
+// Page affichée à un NAVIGATEUR qui ouvre /mcp à la main (humain). Les clients
+// MCP peuvent découvrir l'annuaire sans compte et se connecter pour agir.
 const LANDING_HTML = `<!doctype html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
 <title>Connecteur IA — Le Parrain</title><style>
@@ -44,11 +43,11 @@ a.btn{display:inline-block;margin-top:1rem;background:linear-gradient(135deg,var
 </style></head><body><div class="card">
 <span class="badge">Connecteur IA</span>
 <h1>Le Parrain — connecteur pour assistants</h1>
-<p>Cette adresse permet à un assistant IA (Claude, ChatGPT) d'interroger l'annuaire de parrainage Le Parrain et d'y publier vos liens. Elle n'est pas faite pour être ouverte dans un navigateur — d'où ce message.</p>
+<p>Cette adresse permet à un assistant IA (Claude, ChatGPT) d'interroger l'annuaire de parrainage Le Parrain sans compte. Connectez-vous pour publier vos liens ou accéder à vos données personnelles. Elle n'est pas faite pour être ouverte dans un navigateur — d'où ce message.</p>
 <p style="color:var(--fg)"><strong>Pour l'utiliser dans Claude :</strong></p>
 <ol><li>Réglages → <strong>Connecteurs</strong> → <em>Ajouter un connecteur personnalisé</em>.</li>
 <li>Collez l'adresse <code>https://leparrain.com/mcp</code>.</li>
-<li>Cliquez sur <strong>« Se connecter »</strong> et identifiez-vous avec votre compte Le Parrain.</li></ol>
+<li>Explorez les programmes directement. Pour publier ou consulter votre compte, cliquez sur <strong>« Se connecter »</strong>.</li></ol>
 <a class="btn" href="https://leparrain.com/connecteur-ia">Comment ça marche</a>
 <div class="foot">Vous cherchiez le site ? <a href="https://leparrain.com">leparrain.com</a></div>
 </div></body></html>`;
@@ -114,9 +113,8 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
 
-  // Visite NAVIGATEUR (humain) : page d'explication au lieu du JSON 401. Les
-  // clients MCP envoient Accept: application/json/event-stream → ils passent à
-  // l'auth ci-dessous et reçoivent le défi 401.
+  // Visite NAVIGATEUR (humain) : page d'explication. Les clients MCP envoient
+  // Accept: application/json/event-stream et accèdent aux outils publics.
   if (req.method === "GET" && (req.headers["accept"] || "").includes("text/html")) {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     return res.end(LANDING_HTML);
@@ -124,12 +122,12 @@ const server = http.createServer(async (req, res) => {
 
   // ── Authentification (spec d'auth MCP) ──────────────────────────
   // Token via header `Authorization: Bearer` (OAuth « Se connecter ») OU `?k=`
-  // (lien legacy). Sans token valide → 401 + WWW-Authenticate pointant vers les
-  // métadonnées de ressource → le connecteur (Claude/ChatGPT) lance le flow
-  // OAuth et nous renvoie ensuite un Bearer.
+  // (lien legacy). Sans token, l'appelant est anonyme. Un token fourni mais
+  // invalide déclenche le défi OAuth, sans accès aux outils personnels.
   const authz = req.headers["authorization"] || "";
-  const bearer = authz.startsWith("Bearer ") ? authz.slice(7).trim() : "";
+  const bearer = /^Bearer\s+(.+)$/i.exec(authz)?.[1]?.trim() || "";
   const token = bearer || url.searchParams.get("k") || "";
+  const attemptedAuth = Boolean(authz) || url.searchParams.has("k");
   const identity = token ? await validateToken(token) : null;
   // LP injoignable : c'est une panne de NOTRE côté, pas un token périmé. On
   // répond 503 (retryable) et SURTOUT pas 401 + WWW-Authenticate, qui ferait
@@ -147,7 +145,7 @@ const server = http.createServer(async (req, res) => {
       })
     );
   }
-  if (!identity?.user_id) {
+  if (attemptedAuth && !identity?.user_id) {
     const meta = `${PUBLIC_BASE}/.well-known/oauth-protected-resource`;
     res.writeHead(401, {
       "www-authenticate": `Bearer resource_metadata="${meta}"`,
@@ -162,9 +160,9 @@ const server = http.createServer(async (req, res) => {
     );
   }
   const caller = {
-    user: identity.user_id,
-    email: identity.email,
-    emailConfirmed: identity.email_confirmed,
+    user: identity?.user_id || null,
+    email: identity?.email || null,
+    emailConfirmed: identity?.email_confirmed || false,
     platformOwner: PLATFORM_OWNER,
     token,
     client: req.headers["user-agent"] || null,
@@ -215,7 +213,8 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, "127.0.0.1", () => {
+  const address = server.address();
   console.error(
-    `[leparrain-mcp] HTTP prêt sur http://127.0.0.1:${PORT}${MCP_PATH} — C'est du sssolide !`
+    `[leparrain-mcp] HTTP prêt sur http://127.0.0.1:${address.port}${MCP_PATH} — C'est du sssolide !`
   );
 });

@@ -54,7 +54,7 @@ export async function searchPrograms({ query }, caller, seed = 0) {
     return {
       data: { results: [] },
       text: withFlavor(
-        `Aucun programme ne correspond à « ${query} » dans l'annuaire. Vous pouvez en proposer un avec suggest_program.`,
+        `Aucun programme ne correspond à « ${query} » dans l'annuaire. Essayez un autre nom ou une autre catégorie.`,
         seed
       ),
     };

@@ -245,6 +245,8 @@ console.log("\nGating des outils connectés (sans réseau) :");
   for (const tool of forbiddenProManagementTools) {
     assert.ok(!connTools.includes(tool), `${tool} ne doit pas être exposé`);
   }
+  assert.ok(!anonTools.includes("suggest_program") && !connTools.includes("suggest_program"));
+  ok("suggest_program non exposé : file de modération non persistante");
   ok("aucun outil d'inscription ou de gestion Pro exposé");
 
   const recommendDescription = connServer._registeredTools.recommend_contact.description;
