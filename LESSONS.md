@@ -24,3 +24,10 @@
   Les journaux de placement et la mesure d'usage restent actifs.
 - Vérification : le test HTTP contrôle les annotations, une entrée du journal
   de placement et l'envoi de la mesure d'usage après une lecture connectée.
+
+
+## 2026-10-25 — Correctifs de dépendances LeParrain MCP
+
+Origine : le verrou npm conservait des versions transitives concernées par les avis de sécurité publiés en octobre, malgré des plages semver permissives.
+
+Correction : actualisation ciblée par npm audit fix, sans --force et sans scripts d'installation ; aucun changement fonctionnel ni de configuration. Vérifier l'audit de production et les tests locaux avant publication, puis refaire l'audit sur les dépendances réellement installées après déploiement.
