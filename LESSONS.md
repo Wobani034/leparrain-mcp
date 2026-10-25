@@ -30,4 +30,6 @@
 
 Origine : le verrou npm conservait des versions transitives concernées par les avis de sécurité publiés en octobre, malgré des plages semver permissives.
 
-Correction : actualisation ciblée par npm audit fix, sans --force et sans scripts d'installation ; aucun changement fonctionnel ni de configuration. Vérifier l'audit de production et les tests locaux avant publication, puis refaire l'audit sur les dépendances réellement installées après déploiement.
+Correction : actualisation ciblée par npm audit fix, sans --force et sans scripts d'installation ; aucun changement de code ni de configuration. Les montées mineures de dépendances restent à recetter. Vérifier l'audit de production et les tests locaux avant publication, puis refaire l'audit sur les dépendances réellement installées après déploiement.
+
+Détail de cette correction : body-parser 2.4.0 (GHSA-27r3-jxmh-p828), zod 4.6.7 (GHSA-mrhx-c7xc-m3w5), Hono 4.13.13 (GHSA-5r4p-p66f-jhc7), fast-uri 3.1.9 et ip-address 10.7.4 ; smoke, boost et HTTP passants.
