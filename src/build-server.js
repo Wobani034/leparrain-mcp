@@ -74,8 +74,8 @@ export function buildServer({ caller }) {
       version: "0.1.0",
       websiteUrl: "https://leparrain.com",
       icons: [
-        { src: "https://leparrain.com/mcp-icon-512.png", mimeType: "image/png", sizes: ["512x512"] },
-        { src: "https://leparrain.com/mcp-icon-64.png", mimeType: "image/png", sizes: ["64x64"] },
+        { src: "https://leparrain.com/connector-icon-512.png", mimeType: "image/png", sizes: ["512x512"] },
+        { src: "https://leparrain.com/connector-icon-64.png", mimeType: "image/png", sizes: ["64x64"] },
       ],
     },
     { instructions: INSTRUCTIONS }
