@@ -86,6 +86,14 @@ async function main() {
     });
     assert.equal(init.status, 200);
     assert.ok(init.body.result?.protocolVersion);
+    const info = init.body.result.serverInfo;
+    assert.equal(info.title, 'Le Parrain');
+    assert.equal(info.websiteUrl, 'https://leparrain.com');
+    assert.deepEqual(info.icons.map((i) => i.sizes[0]), ['512x512', '64x64']);
+    for (const icon of info.icons) {
+      assert.equal(icon.mimeType, 'image/png');
+      assert.match(icon.src, /^https:\/\/leparrain\.com\/.+\.png$/);
+    }
 
     const anonymous = await request(base, 'tools/list');
     assert.equal(anonymous.status, 200);
@@ -150,6 +158,25 @@ async function main() {
       assert.equal(result.status, 401);
       assert.match(result.headers.get('www-authenticate'), /oauth-protected-resource/);
     }
+    // /mcp/auth : 401 sans token, avec métadonnées propres à cette ressource.
+    const authUrl = `${base}/auth`;
+    const noToken = await request(authUrl, 'initialize', {
+      protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'http-test', version: '1' },
+    });
+    assert.equal(noToken.status, 401);
+    assert.equal(noToken.headers.get('www-authenticate'),
+      'Bearer resource_metadata="https://leparrain.com/.well-known/oauth-protected-resource/mcp/auth"');
+    const badToken = await request(authUrl, 'tools/list', undefined, 'Bearer bad');
+    assert.equal(badToken.status, 401);
+    assert.match(badToken.headers.get('www-authenticate'), /resource_metadata=".*\/mcp\/auth", error="invalid_token"$/);
+    const getNoToken = await fetch(authUrl, { headers: { accept: 'text/event-stream' } });
+    assert.equal(getNoToken.status, 401);
+    const goodAuth = await request(authUrl, 'tools/list', undefined, 'Bearer good');
+    assert.equal(goodAuth.status, 200);
+    assert.ok(goodAuth.body.result.tools.some((t) => t.name === 'create_announcement'));
+    // /mcp inchangé : anonyme toujours OK, sans WWW-Authenticate.
+    assert.equal(init.headers.get('www-authenticate'), null);
+
     const unavailable = await request(base, 'tools/list', undefined, 'Bearer down');
     assert.equal(unavailable.status, 503);
     assert.equal(unavailable.headers.get('www-authenticate'), null);

@@ -22,6 +22,10 @@ import { validateToken, BACKEND_UNAVAILABLE } from "./backend.js";
 
 const PORT = Number(process.env.PORT || process.env.MCP_HTTP_PORT || 3005);
 const MCP_PATH = process.env.MCP_PATH || "/mcp";
+// Point d'entrée « connexion obligatoire » : même serveur MCP, mais tout appel
+// sans bearer valide reçoit 401 + WWW-Authenticate (certains clients, ex. Grok,
+// ne lancent OAuth que sur un 401). /mcp reste anonyme-OK.
+const AUTH_PATH = `${MCP_PATH}/auth`;
 const PLATFORM_OWNER = process.env.LP_PLATFORM_OWNER || "antoine";
 // Base publique pour le défi OAuth (resource_metadata du 401).
 const PUBLIC_BASE = (process.env.LP_PUBLIC_BASE || "https://leparrain.com").replace(/\/+$/, "");
@@ -99,7 +103,8 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
-  if (url.pathname !== MCP_PATH) {
+  const requireAuth = url.pathname === AUTH_PATH;
+  if (url.pathname !== MCP_PATH && !requireAuth) {
     return send(res, 404, { error: "not_found", hint: `Le endpoint MCP est ${MCP_PATH}` });
   }
 
@@ -145,10 +150,13 @@ const server = http.createServer(async (req, res) => {
       })
     );
   }
-  if (attemptedAuth && !identity?.user_id) {
-    const meta = `${PUBLIC_BASE}/.well-known/oauth-protected-resource`;
+  if ((attemptedAuth || requireAuth) && !identity?.user_id) {
+    // RFC 9728 : métadonnées par ressource (insertion du chemin après /.well-known/...).
+    const meta = `${PUBLIC_BASE}/.well-known/oauth-protected-resource${requireAuth ? AUTH_PATH : ""}`;
+    // RFC 6750 : error="invalid_token" seulement si un token a été fourni.
+    const err = attemptedAuth ? `, error="invalid_token"` : "";
     res.writeHead(401, {
-      "www-authenticate": `Bearer resource_metadata="${meta}"`,
+      "www-authenticate": `Bearer resource_metadata="${meta}"${err}`,
       "content-type": "application/json",
     });
     return res.end(
